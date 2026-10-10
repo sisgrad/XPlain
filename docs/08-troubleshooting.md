@@ -1,0 +1,111 @@
+# Устранение неполадок
+
+Первый шаг при любой проблеме — Output → **XPlain** (логи хоста) и, для панели,
+**Developer: Open Webview Developer Tools**.
+
+## Иконки XPlain нет в левой панели
+
+- Расширение не установлено там, где работает extension host. При Remote-SSH оно должно быть на
+  **удалённой** стороне: Extensions → раздел «SSH: …» → найти XPlain; либо выполнить
+  `bash scripts/install.sh` на удалённой машине.
+- После установки нужен **Developer: Reload Window**.
+- Иконка могла быть скрыта: правый клик по activity bar → отметить XPlain.
+
+## Панель пустая / не реагирует
+
+- Откройте Webview Developer Tools и посмотрите консоль. Типичная причина — старый `dist/` после
+  изменения исходников: `npm run build`, затем Reload Window.
+- При разработке через F5 убедитесь, что `npm run watch` запущен или выполнена сборка.
+
+## Shift+X не добавляет блок
+
+- Должно быть выделение в текстовом редакторе (`editorHasSelection`), фокус — в редакторе.
+- Файл должен лежать внутри открытой папки workspace и иметь схему `file` (не untitled, не diff,
+  не Output). Иначе появится предупреждение «only files inside the workspace…».
+- Нет открытой папки → «XPlain needs an open folder…»; откройте папку (File → Open Folder).
+- Конфликт сочетаний: Keyboard Shortcuts → найдите `shift+x` и проверьте, нет ли другого биндинга с
+  более высоким приоритетом; при необходимости переназначьте `xplain.addSelectionToContext`.
+
+## Shift+X печатает «X» вместо pick mode
+
+Pick mode переключается только когда фокус **не** в редакторе, не в поле ввода, не в терминале и не в
+Quick Open. Кликните в панель XPlain или Explorer и нажмите снова. Внутри панели сочетание работает,
+если фокус не в текстовом поле.
+
+## Запрос падает с ошибкой
+
+| Сообщение | Причина / действие |
+| --- | --- |
+| `Agent endpoint is not configured` | Задайте `xplain.agent.endpoint` |
+| `Cannot reach agent at …` | Сервис не запущен или недоступен с машины, где работает extension host. При Remote-SSH `127.0.0.1` — это удалённый хост, а не ваш ноутбук; запустите агент там или укажите доступный адрес |
+| `Agent did not respond within N ms` | Увеличьте `xplain.agent.timeoutMs` или включите стриминг на стороне агента |
+| `Agent returned HTTP 401/403` | Нужен ключ: **XPlain: Set Agent API Key**; проверьте заголовки в `xplain.agent.headers` |
+| `Agent returned HTTP 4xx/5xx: …` | Смотрите тело ответа в сообщении и логи своего сервиса |
+| `Agent response has no "content" field` | Ответ должен содержать `content` (или `answer`/`markdown`/`html`) — см. [04-agent-api.md](04-agent-api.md) |
+| `Agent stream finished without any content` | В NDJSON-потоке не было `delta` и `done.content` |
+
+Для изоляции проблемы переключите `xplain.agent.provider` на `mock`: если всё работает, дело в сервисе
+или сети. Контракт можно проверить `curl`-ом:
+
+```bash
+curl -sS -X POST -H 'Content-Type: application/json' -H 'Accept: application/x-ndjson' \
+  -d '{"sessionId":"t","question":"ping","items":[]}' http://127.0.0.1:8765/explain
+```
+
+## CodeLens не появляется
+
+- `xplain.editor.showCodeLens` должен быть `true`; также глобальная настройка `editor.codeLens`.
+- CodeLens показывается только для сессий со статусом `done`. Сессии с ошибкой — в History.
+- Якорь мог стать stale (блок удалён или сильно изменён). Откройте History → результат → «Add to context»
+  работает и без CodeLens. Якорь вернётся, если текст блока появится снова.
+- Файл открыт по другому пути (симлинк, другой регистр букв) — путь в `index.json` относительный и
+  должен совпадать с `workspace.asRelativePath`.
+
+## CodeLens на «неправильных» строках
+
+Диапазон сохраняется с задержкой ~1.5 с после правок и при сохранении. Если файл изменён вне VS Code
+(git checkout, форматирование в CLI), блок переищется по содержимому при следующем открытии. Если текст
+блока изменился и вне редактора, и внутри, автоматический поиск невозможен — добавьте блок заново, старое
+объяснение останется в History.
+
+## Результат HTML не отображается
+
+- В панели HTML показывается через `iframe`, файл должен лежать в `.xplain/sessions/<id>/result.html`.
+  Если файл удалён вручную — «HTML result could not be located on disk».
+- Внешние ресурсы (CDN-скрипты, картинки) внутри HTML загружаются по правилам iframe-песочницы и
+  сетевого доступа клиента; надёжнее присылать self-contained HTML.
+- «Open in editor» открывает HTML в отдельной вкладке без ограничений панели.
+
+## Drag-and-drop файлов не работает
+
+- Файлы из проводника ОС при Remote-SSH читаются на клиенте и передаются как текст — работает для
+  текстовых файлов до 1 МБ. Бинарные и большие пропускаются с уведомлением «Skipped: …».
+- Из Explorer VS Code передаётся `text/uri-list`; файл читается на стороне хоста. Если ничего не
+  произошло, посмотрите Output → XPlain и консоль webview.
+- Запасной путь — клик по зоне «browse…» (системный диалог выбора файлов).
+
+## Фон не меняется
+
+- Проектный фон (`.xplain/ui/background.*`) имеет приоритет над пользовательским; очистите его
+  командой **XPlain: Clear Background Image** → «This project».
+- Файлы крупнее 15 МБ отклоняются.
+- При очень низкой `opacity` фон может быть практически невидим — проверьте настройку.
+
+## `.xplain/` не создаётся
+
+- Нет прав на запись в корень workspace — см. сообщение «cannot create .xplain folder» и Output.
+- Открыт multi-root workspace: используется **первая** папка.
+- Открыт одиночный файл без папки — хранилище отключено (баннер в панели).
+
+## Данные повреждены
+
+`index.json` с ошибкой JSON игнорируется (в Output — «index.json is corrupt, starting fresh»), при этом
+папки сессий на диске остаются. Восстановить можно, собрав `sessions[]` из `sessions/*/context.json`
+вручную, или просто удалить `.xplain/` для чистого старта.
+
+## Сбор информации для отчёта об ошибке
+
+1. Версия Cursor/VS Code (Help → About) и XPlain (`package.json` / Extensions).
+2. Содержимое Output → XPlain.
+3. Консоль Webview Developer Tools при проблемах с панелью.
+4. Фрагмент `.xplain/index.json` (можно без `snippet`) при проблемах с якорями.

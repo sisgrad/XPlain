@@ -10,6 +10,9 @@ answer anchored to the code it explains. Answers are stored in the project
 Built only on stable VS Code APIs (no proposed APIs), so it works in VS Code and Cursor,
 locally and through Remote-SSH.
 
+Full documentation (installation, user guide, configuration, agent API, storage format,
+architecture, development, troubleshooting) lives in [`docs/`](docs/README.md).
+
 ## Workflow
 
 1. Select a block of code and press **Shift+X**. The block appears in the XPlain panel as

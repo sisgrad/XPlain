@@ -1,0 +1,112 @@
+# Разработка
+
+## Подготовка окружения
+
+```bash
+bash scripts/setup.sh --no-package   # поставит Node (если нужно), зависимости, соберёт бандлы
+# или вручную при наличии Node >= 20:
+npm install                          # postinstall собирает dist/
+```
+
+Node устанавливается через nvm в `~/.nvm`; в новой оболочке нужен `. ~/.nvm/nvm.sh` (скрипт
+добавляет строки в `~/.bashrc`, если их там нет).
+
+## Скрипты npm
+
+| Команда | Действие |
+| --- | --- |
+| `npm run build` | Сборка `dist/extension.js` и `dist/webview.js` + копирование CSS/шрифтов (с sourcemap) |
+| `npm run watch` | То же в режиме наблюдения |
+| `npm run check` | `tsc --noEmit` для хоста (`tsconfig.json`) и webview (`webview/tsconfig.json`) |
+| `npm run lint` | ESLint для `src/` и `webview/` |
+| `npm test` | Компиляция в `out/` (`tsconfig.test.json`) и запуск mocha |
+| `npm run package` | Production-сборка (minify, без sourcemap) + `vsce package` → `dist/xplain-<версия>.vsix` |
+| `npm run install:ide` | `scripts/install.sh` — установка `.vsix` в найденные Cursor/VS Code |
+
+## Отладка (F5)
+
+`.vscode/launch.json` содержит конфигурацию **Run Extension**: собирает проект (`npm: build`) и запускает
+Extension Development Host с открытой папкой `debug_samples/`. Там лежит `4_warp_specialization.cu` —
+удобный большой файл для проверки якорей и CodeLens.
+
+Рекомендуемый цикл:
+
+1. `npm run watch` в терминале.
+2. F5. После правок — **Developer: Reload Window** в окне Development Host (Ctrl+R).
+3. Логи хоста — Output → **XPlain**; ошибки webview — **Developer: Open Webview Developer Tools**.
+
+Для проверки без агента: `xplain.agent.provider = mock` или `python3 examples/agent_server.py`.
+
+## Структура исходников
+
+```
+src/                  extension host (TypeScript, CommonJS-бандл)
+  shared/             типы и протокол, общие с webview (алиас @shared/*)
+  storage/            .xplain/, абстракция FS
+  editor/             якоря, CodeLens, декорации, pick mode
+  agent/              провайдеры и заголовки
+  panel/              WebviewView, фон
+  context/            ContextDraft
+  util/
+webview/              UI (Preact, IIFE-бандл для браузера)
+test/                 mocha-тесты (Node, без vscode)
+scripts/              setup/install для Linux/macOS/Windows
+examples/             референсный агент-сервер
+media/                иконки
+```
+
+Два tsconfig: `tsconfig.json` (хост, `lib: ES2022`, без DOM) и `webview/tsconfig.json`
+(браузер, `jsx: react-jsx`, `jsxImportSource: preact`). Общий код в `src/shared/` не должен
+использовать ни `vscode`, ни Node-специфичные API.
+
+## Сборка (esbuild.mjs)
+
+- Хост: `src/extension.ts` → `dist/extension.js`, `platform: node`, `external: ['vscode']`, target node18.
+- Webview: `webview/main.tsx` → `dist/webview.js`, `platform: browser`, формат IIFE, alias `@shared`.
+- Статика: `webview/styles.css` → `dist/webview.css`; `highlight.js/styles/github-dark.min.css` → `dist/hljs.css`;
+  `@vscode/codicons` → `dist/codicon.css` + `codicon.ttf`.
+- Флаги: `--watch`, `--production` (minify, без sourcemap).
+
+## Тесты
+
+Юнит-тесты не зависят от `vscode`: хранилище работает через `NodeStoreFs` во временной директории,
+HTTP-провайдер — против реального локального `http.Server`.
+
+| Файл | Что проверяет |
+| --- | --- |
+| `test/anchors.test.ts` | нормализация/хеш, `toLineChange`, сдвиги диапазонов, поиск snippet, валидация хеша |
+| `test/store.test.ts` | создание `.xplain`, переиспользование якорей, сессии ↔ якоря, результаты md/html, reload, шаблоны, фон |
+| `test/http.test.ts` | JSON-ответ, NDJSON-стрим с дельтами, `done.content`, не-JSON тело, HTTP-ошибки, таймаут, отмена |
+| `test/misc.test.ts` | `deriveTitle`, `ContextDraft`, `isViewMessage` |
+
+Запуск: `npm test`. Один файл: `npx mocha out/test/anchors.test.js` после `tsc -p tsconfig.test.json`.
+
+Интеграционных тестов в реальном VS Code нет (нет дисплея на хосте разработки). Ручной чек-лист перед релизом:
+
+1. Shift+X на выделении → элемент `L..-L..` в панели, подсветка блока.
+2. Send (mock) → стриминг во вкладке Result, CodeLens над блоком, запись в `.xplain/`.
+3. Второй send того же блока → CodeLens `2 explanations`, Quick Pick с двумя пунктами.
+4. Подблок внутри блока → отдельный CodeLens.
+5. Pick mode: Shift+X вне редактора → клик CodeLens → результат в контексте.
+6. Правка выше блока → CodeLens сдвигается; reload окна → якорь найден.
+7. Templates: drop из Explorer и из ОС, сохранение, выбор в Context, передача в запрос.
+8. Фон: выбор файла, drop картинки, настройки opacity/blur/fit, очистка.
+9. HTML-результат (сервер с `format: html`) → iframe в панели, Open in editor.
+
+## Соглашения
+
+- Только стабильные API VS Code; `engines.vscode` не поднимать без необходимости.
+- Всё, что можно, держать вне зависимости от `vscode` ради тестируемости.
+- UI-строки на английском; протокол и типы — в `src/shared/`, менять синхронно с webview.
+- Изменения формата `.xplain/` — поднимать `XplainIndex.version` и писать миграцию в `XplainStore.init`.
+- Коммиты — по фичам; перед коммитом `npm run check && npm run lint && npm test`.
+
+## Выпуск версии
+
+1. Обновить `version` в `package.json` (и CHANGELOG при наличии).
+2. `npm run check && npm run lint && npm test`.
+3. `npm run package` → `dist/xplain-<версия>.vsix`.
+4. `npm run install:ide` для локальной проверки; приложить `.vsix` к релизу.
+
+Поле `repository` в `package.json` не задано, поэтому `vsce` вызывается с `--allow-missing-repository`;
+при появлении удалённого репозитория добавьте поле и уберите флаг.
