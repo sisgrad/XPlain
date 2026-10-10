@@ -3,15 +3,21 @@
 Explain code with your own LLM agent, directly from VS Code or Cursor.
 
 XPlain lets you collect code blocks into a *context*, add a question and an optional
-template (instruction + reference files), send it to your agent service and keep every
+template (instruction + reference files), send it to an agent and keep every
 answer anchored to the code it explains. Answers are stored in the project
 (`.xplain/`) and surface in the editor as CodeLens entries above the blocks.
+
+Agents are pluggable and configured from the panel's **Agent** tab: a local
+**Hermes Agent** harness, **Anthropic (Claude)**, **OpenAI / Codex** (or any
+OpenAI-compatible server), your own service speaking the **XPlain HTTP contract**,
+or an offline **mock**.
 
 Built only on stable VS Code APIs (no proposed APIs), so it works in VS Code and Cursor,
 locally and through Remote-SSH.
 
-Full documentation (installation, user guide, configuration, agent API, storage format,
-architecture, development, troubleshooting) lives in [`docs/`](docs/README.md).
+Full documentation (installation, user guide, configuration, agent providers, storage format,
+architecture, development, troubleshooting) lives in the `docs/` folder of the repository
+(start with `docs/README.md`).
 
 ## Workflow
 
@@ -45,7 +51,7 @@ binding in *Keyboard Shortcuts* (`xplain.addSelectionToContext`) if that bothers
 
 1. Download or build `xplain-<version>.vsix` (see Option B).
 2. In VS Code / Cursor: Extensions view -> `...` menu -> **Install from VSIX...**.
-   From the command line: `cursor --install-extension xplain-0.1.0.vsix` (or `code ...`).
+   From the command line: `cursor --install-extension xplain-0.2.0.vsix` (or `code ...`).
 3. **Remote-SSH**: the extension runs on the remote side (`extensionKind: workspace`).
    Copy the `.vsix` to the remote machine and run `bash scripts/install.sh path/to/xplain.vsix`
    there, or install from the Extensions view while connected (it is installed remotely automatically).
@@ -79,23 +85,48 @@ npm run watch                        # rebuild on change
 
 Press **F5** to launch the Extension Development Host with `debug_samples/` opened.
 
+## Choosing an agent
+
+Open the **Agent** tab in the XPlain panel (or click the agent name in the footer of the
+Context tab, or run **XPlain: Configure Agent**). Pick a provider, fill in its fields, paste
+the API key (stored in the IDE's secret storage, never in `settings.json` or `.xplain/`),
+press **Test connection** and then **Save** (to your user settings or to this workspace).
+
+| Provider | What it talks to | Fields |
+| --- | --- | --- |
+| **Hermes Agent** | Hermes harness API server (OpenAI-compatible). Enable it in Hermes with `API_SERVER_ENABLED=true`, `API_SERVER_KEY=...`, run `hermes api-server`. | Base URL (`http://127.0.0.1:8642/v1`), model (`hermes-agent` or a profile name), key = `API_SERVER_KEY`. Tool-progress events are ignored, the final answer is streamed. |
+| **Anthropic (Claude)** | Anthropic Messages API. | Base URL, model id (e.g. `claude-sonnet-5`), `max_tokens`, API key (`x-api-key`). |
+| **OpenAI / Codex** | OpenAI Chat Completions, or any compatible server (Ollama, vLLM, LiteLLM, OpenRouter). | Base URL (`https://api.openai.com/v1`), model id, API key (Bearer). |
+| **XPlain HTTP agent** | Your own service speaking the contract below. | Endpoint URL, optional Bearer key. |
+| **Mock (offline)** | Built-in canned answer. | - |
+
+**Test connection** lists the models the server offers (Hermes/OpenAI/Anthropic); click a model
+chip to put it into the *Model* field. For chat providers the context is rendered into one user
+message (templates, previous results, fenced code blocks with `L` ranges, question) preceded by a
+system prompt that asks for a Markdown answer starting with a short `#` title; override it under
+*Advanced -> System prompt*.
+
 ## Configuration
 
 | Setting | Default | Description |
 | --- | --- | --- |
-| `xplain.agent.provider` | `http` | `http` calls your agent service; `mock` returns a canned answer (offline demo). |
-| `xplain.agent.endpoint` | `http://127.0.0.1:8765/explain` | URL that receives the context. |
-| `xplain.agent.timeoutMs` | `180000` | Request timeout. |
-| `xplain.agent.streaming` | `true` | Accept NDJSON streaming responses. |
-| `xplain.agent.headers` | `{}` | Extra headers. |
+| `xplain.agent.provider` | `xplain` | `xplain`, `hermes`, `openai`, `anthropic` or `mock`. |
+| `xplain.agent.endpoint` | `http://127.0.0.1:8765/explain` | [xplain] URL that receives the context. |
+| `xplain.agent.hermes.baseUrl` / `model` | `http://127.0.0.1:8642/v1` / `hermes-agent` | [hermes] API server and model/profile. |
+| `xplain.agent.openai.baseUrl` / `model` | `https://api.openai.com/v1` / `chat-latest` | [openai] API base and model id. |
+| `xplain.agent.anthropic.baseUrl` / `model` / `maxTokens` | `https://api.anthropic.com` / `claude-sonnet-5` / `8192` | [anthropic] API base, model, `max_tokens`. |
+| `xplain.agent.systemPrompt` | `""` | [hermes/openai/anthropic] Custom system prompt; empty = built-in. |
+| `xplain.agent.timeoutMs` | `180000` | Request timeout (headers + body). |
+| `xplain.agent.streaming` | `true` | Stream partial output (NDJSON or SSE). |
+| `xplain.agent.headers` | `{}` | Extra headers sent to any provider. |
 | `xplain.editor.showCodeLens` | `true` | CodeLens above explained blocks. |
 | `xplain.editor.highlightBlocks` | `true` | Gutter icon / hover for explained blocks. |
 | `xplain.ui.background.opacity` / `blur` / `fit` | `0.18` / `0` / `cover` | Panel background image. |
 
-API key: run **XPlain: Set Agent API Key**. It is stored in the secure secret storage and sent as
-`Authorization: Bearer <key>`.
+API keys are per provider. Set them in the Agent tab or via **XPlain: Set Agent API Key** /
+**XPlain: Clear Agent API Key** (both ask which provider).
 
-### Agent HTTP contract
+### XPlain agent HTTP contract
 
 Request (`POST` to `xplain.agent.endpoint`, `Content-Type: application/json`):
 
@@ -173,6 +204,6 @@ Commit `.xplain/` if you want to share explanations with your team.
 ```bash
 npm run check    # type-check extension + webview
 npm run lint
-npm test         # mocha unit tests (storage, anchors, titles, draft)
+npm test         # mocha unit tests (storage, anchors, titles, draft, providers)
 npm run package  # dist/xplain-<version>.vsix
 ```

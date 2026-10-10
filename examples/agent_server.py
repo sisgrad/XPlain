@@ -5,7 +5,8 @@ Implements the HTTP contract from README.md so you can test the extension before
 wiring your own agent system. Replace `explain()` with a call to your LLM/agent.
 
     python3 examples/agent_server.py --port 8765
-    # then set xplain.agent.endpoint = http://127.0.0.1:8765/explain
+    # then, in the XPlain panel's Agent tab, choose "XPlain HTTP agent" with
+    # endpoint http://127.0.0.1:8765/explain (xplain.agent.provider = "xplain")
 """
 import argparse
 import json

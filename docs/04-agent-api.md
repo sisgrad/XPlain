@@ -1,17 +1,87 @@
-# HTTP-контракт агента
+# Провайдеры агентов и HTTP-контракт
 
-XPlain не содержит LLM — он формирует контекст и отправляет его вашему сервису. Сервис может быть чем
-угодно (одиночная модель, мультиагентный пайплайн, RAG), лишь бы он принимал запрос и возвращал ответ
-в формате ниже. Референсная реализация на чистой стандартной библиотеке Python —
-[`examples/agent_server.py`](../examples/agent_server.py).
+XPlain не содержит LLM — он формирует контекст и отправляет его выбранному *провайдеру*. Провайдер
+выбирается во вкладке **Agent** панели (см. [руководство](02-user-guide.md#вкладка-agent)) или
+настройкой `xplain.agent.provider`.
 
-## Запрос
+| `provider` | Назначение | Протокол |
+| --- | --- | --- |
+| `hermes` | Локальный Hermes Agent harness | OpenAI-совместимый Chat Completions + SSE |
+| `anthropic` | Claude через Anthropic Messages API | `POST /v1/messages` + SSE |
+| `openai` | OpenAI / Codex-модели или любой OpenAI-совместимый сервер (Ollama, vLLM, LiteLLM, OpenRouter) | Chat Completions + SSE |
+| `xplain` | Собственный сервис, говорящий на контракте XPlain (ниже) | JSON или NDJSON |
+| `mock` | Встроенный ответ без сети | — |
+
+Общие параметры для всех: `timeoutMs` (таймаут на заголовки **и** тело ответа), `streaming`,
+`headers` (дополнительные HTTP-заголовки). Ключи API хранятся в `SecretStorage` по одному на провайдера
+(`xplain.agent.apiKey.<provider>`), в `settings.json` и `.xplain/` не попадают.
+
+## Чат-провайдеры: Hermes, OpenAI, Anthropic
+
+Для этих провайдеров XPlain сам превращает контекст в диалог (`src/agent/prompt.ts`):
+
+- **system** — `xplain.agent.systemPrompt`, а если пусто — встроенный промпт: «ты XPlain, объясняй код;
+  ответ в Markdown, первая строка — один заголовок `#` до 8 слов (как название чата), ссылайся на строки
+  `L12-L48`, без вступлений».
+- **user** — один текст в порядке: инструкция шаблона и его файлы → ранее полученные результаты →
+  блоки кода (` ```<language> ` с указанием файла и диапазона строк; если код сам содержит ```` ``` ````,
+  ограждение удлиняется) → вопрос пользователя (или просьба объяснить блоки, если вопрос пуст).
+
+Ответ модели — текст; если он выглядит как полноценный HTML-документ (`<!DOCTYPE html>` / `<html>`),
+результат сохраняется как `html`, иначе как `markdown`. Заголовок берётся из первого `#`.
+
+### Hermes Agent
+
+Hermes должен быть запущен с включённым API-сервером:
+
+```bash
+# ~/.hermes/.env
+API_SERVER_ENABLED=true
+API_SERVER_KEY=<ваш ключ>
+API_SERVER_PORT=8642         # по умолчанию
+
+hermes api-server            # или hermes gateway с включённым api-server
+```
+
+В XPlain: Base URL `http://127.0.0.1:8642/v1`, модель `hermes-agent` (или имя профиля), ключ =
+`API_SERVER_KEY`. Запрос — `POST {baseUrl}/chat/completions` с `stream: true`. Hermes присылает
+стандартные чанки `chat.completion.chunk`, свои события `event: hermes.tool.progress` (ход работы
+инструментов — XPlain их пропускает), комментарии `: keepalive` и `data: [DONE]`. В результат попадает
+только итоговый ответ агента. **Test connection** вызывает `GET /v1/models` и показывает профили.
+
+При Remote-SSH `127.0.0.1` — это удалённая машина (где работает extension host); Hermes должен
+работать там же или быть доступен по сети.
+
+### OpenAI / Codex и совместимые серверы
+
+`POST {baseUrl}/chat/completions`, `Authorization: Bearer <ключ>`, тело
+`{ model, messages: [system, user], stream }`. SSE-чанки `choices[0].delta.content` склеиваются;
+без стриминга берётся `choices[0].message.content`. Ошибки API (`{ "error": { "message" } }`)
+показываются как есть. Для локальных серверов ключ не обязателен. **Test connection** — `GET /models`.
+
+Base URL по умолчанию `https://api.openai.com/v1`, модель `chat-latest`; подставьте любой id из списка
+моделей (в том числе Codex-модели).
+
+### Anthropic (Claude)
+
+`POST {baseUrl}/v1/messages`, заголовки `x-api-key`, `anthropic-version: 2023-06-01`; тело
+`{ model, max_tokens, system, messages: [{ role: "user", content }], stream }`. Из SSE берутся
+события `content_block_delta` с `delta.type == "text_delta"`; без стриминга — все блоки `text` из
+`content`. Ключ обязателен. **Test connection** — `GET /v1/models`.
+
+## Контракт XPlain (provider = `xplain`)
+
+Сервис может быть чем угодно (одиночная модель, мультиагентный пайплайн, RAG), лишь бы он принимал
+запрос и возвращал ответ в формате ниже. Референсная реализация на чистой стандартной библиотеке
+Python — [`examples/agent_server.py`](../examples/agent_server.py).
+
+### Запрос
 
 ```
 POST <xplain.agent.endpoint>
 Content-Type: application/json
 Accept: application/x-ndjson, application/json     # или только application/json при streaming=false
-Authorization: Bearer <ключ>                       # если задан через Set Agent API Key
+Authorization: Bearer <ключ>                       # если задан ключ для провайдера xplain
 <дополнительные заголовки из xplain.agent.headers>
 ```
 
@@ -26,7 +96,7 @@ Authorization: Bearer <ключ>                       # если задан ч�
 }
 ```
 
-### Элементы `items`
+#### Элементы `items`
 
 Блок кода:
 
@@ -66,7 +136,7 @@ Authorization: Bearer <ключ>                       # если задан ч�
 `template.files` — как справочные материалы, `result` — как уже известный контекст,
 `question` — как пользовательский запрос.
 
-## Ответ: один JSON-документ
+### Ответ: один JSON-документ
 
 `Content-Type: application/json` (или любой другой, не содержащий `ndjson` / `event-stream`):
 
@@ -81,7 +151,7 @@ Authorization: Bearer <ключ>                       # если задан ч�
 Допускаются синонимы: `answer`, `markdown` (вместо `content`), `html` (подразумевает `format: html`).
 Тело, не являющееся JSON, принимается как Markdown целиком.
 
-## Ответ: поток NDJSON
+### Ответ: поток NDJSON
 
 `Content-Type: application/x-ndjson`, по одному JSON-объекту на строку:
 
@@ -110,7 +180,7 @@ Authorization: Bearer <ключ>                       # если задан ч�
 
 Заголовки в UI должны быть содержательными (не `v1`/`v2`). Приоритет:
 
-1. `title` из ответа агента (рекомендуется);
+1. `title` из ответа агента (только контракт XPlain; рекомендуется);
 2. первый заголовок `#`/`##`/`###` в Markdown или `<title>`/`<h1>` в HTML;
 3. вопрос пользователя;
 4. `имя_файла LNN-LMM: первая строка блока`.
@@ -121,19 +191,34 @@ Authorization: Bearer <ключ>                       # если задан ч�
 
 | Ситуация | Поведение XPlain |
 | --- | --- |
-| HTTP-статус не 2xx | Ошибка `Agent returned HTTP <код>: <первые 500 символов тела>` |
+| HTTP-статус не 2xx | Ошибка `HTTP <код>: <первые 500 символов тела>` (для OpenAI/Anthropic — текст `error.message`) |
 | Сетевая ошибка / сервис недоступен | `Cannot reach agent at <url>: …` |
-| Превышен `xplain.agent.timeoutMs` | `Agent did not respond within N ms` |
+| Превышен `xplain.agent.timeoutMs` (заголовки или тело) | `Agent did not respond within N ms` |
 | Отмена пользователем | Сессия удаляется, уведомление «Request cancelled» |
 | Событие `error` в потоке | Сообщение показывается пользователю, сессия помечена `failed` |
-| Пустой поток без контента | `Agent stream finished without any content` |
+| Пустой ответ | `… empty answer` / `Agent stream finished without any content` |
+| Не задан ключ Anthropic / модель / base URL | Ошибка до отправки с подсказкой открыть вкладку Agent |
 
 Текст ошибки сохраняется в `context.json` сессии и виден в History. Контекст пользователя при ошибке
-не очищается — можно исправить и отправить снова.
+не очищается — можно исправить и отправить снова. Провайдер, endpoint/base URL и модель, которыми был
+получен ответ, записываются в `context.json` (`agent.provider`, `agent.endpoint`, `agent.model`).
+
+## Проверка соединения (Test connection)
+
+| Провайдер | Что делает |
+| --- | --- |
+| `hermes`, `openai` | `GET {baseUrl}/models`; показывает список и отмечает, есть ли в нём выбранная модель |
+| `anthropic` | `GET {baseUrl}/v1/models?limit=100` |
+| `xplain` | Отправляет короткий запрос-«ping» с пустым `items` и ждёт любой валидный ответ |
+| `mock` | Всегда успешно |
+
+Тест использует значения из формы (ещё не сохранённые) и **сохранённый** ключ API; таймаут — не более
+20 с. Клик по модели в списке подставляет её в поле *Model*.
 
 ## Безопасность
 
-- Ключ API живёт в `SecretStorage` VS Code, в настройки и `.xplain/` не попадает.
+- Ключи API живут в `SecretStorage` VS Code (по одному на провайдера), в настройки и `.xplain/` не
+  попадают. Отправляются как `Authorization: Bearer` (Hermes, OpenAI, XPlain) или `x-api-key` (Anthropic).
 - Ответ в формате Markdown рендерится без raw-HTML (`html: false`), HTML — в `iframe sandbox="allow-scripts"`
   без доступа к API VS Code.
 - При Remote-SSH запрос уходит с удалённой машины (где работает extension host), а не с клиента —

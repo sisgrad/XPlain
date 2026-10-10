@@ -3,16 +3,21 @@
  * `HostMessage` flows host -> webview, `ViewMessage` flows webview -> host.
  */
 import type {
+  AgentProviderId,
+  AgentSettings,
+  AgentSettingsView,
+  AgentTestResult,
   BackgroundState,
   BusyState,
   DraftState,
   ResultFormat,
   SessionMeta,
+  SettingsTarget,
   TemplateFile,
   TemplateMeta,
 } from './types';
 
-export type PanelTab = 'context' | 'result' | 'templates' | 'history';
+export type PanelTab = 'context' | 'result' | 'templates' | 'history' | 'agent';
 
 export interface InitState {
   draft: DraftState;
@@ -24,6 +29,7 @@ export interface InitState {
   /** Webview URI of the stylesheet for highlight.js. */
   hasWorkspace: boolean;
   agentLabel: string;
+  agentSettings: AgentSettingsView;
 }
 
 export type HostMessage =
@@ -49,6 +55,8 @@ export type HostMessage =
   | { type: 'templateFiles'; files: TemplateFile[] }
   | { type: 'editTemplate'; template: TemplateMeta; files: TemplateFile[] }
   | { type: 'tab'; tab: PanelTab }
+  | { type: 'agentSettings'; settings: AgentSettingsView }
+  | { type: 'agentTest'; result: AgentTestResult }
   | { type: 'notice'; level: 'info' | 'warn' | 'error'; message: string };
 
 export type ViewMessage =
@@ -82,6 +90,10 @@ export type ViewMessage =
   | { type: 'clearBackground' }
   | { type: 'dropBackground'; name: string; dataBase64: string }
   | { type: 'openSettings' }
+  | { type: 'saveAgentSettings'; settings: AgentSettings; target: SettingsTarget }
+  | { type: 'setAgentKey'; provider: AgentProviderId; key: string }
+  | { type: 'clearAgentKey'; provider: AgentProviderId }
+  | { type: 'testAgent'; settings: AgentSettings }
   | { type: 'openExternal'; url: string }
   | { type: 'log'; message: string };
 

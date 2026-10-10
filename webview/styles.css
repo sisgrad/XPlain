@@ -324,6 +324,117 @@ code {
   color: var(--vscode-badge-foreground);
 }
 
+.chip.ok {
+  background: var(--vscode-testing-iconPassed, #388a34);
+  color: #fff;
+}
+
+.chip.clickable {
+  margin: 0;
+  padding: 2px 7px;
+  font-size: 11px;
+  border: 1px solid transparent;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.chip.clickable:hover {
+  border-color: var(--vscode-focusBorder);
+}
+
+.chip.clickable.current {
+  background: var(--vscode-button-background);
+  color: var(--vscode-button-foreground);
+}
+
+/* -------------------------------------------------------------- agent tab */
+.agent-tab {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  margin-bottom: 8px;
+}
+
+.field-label {
+  font-size: 11px;
+  color: var(--vscode-descriptionForeground);
+}
+
+.check {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.check input {
+  margin: 0;
+}
+
+details.advanced > summary {
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--vscode-descriptionForeground);
+  margin-bottom: 8px;
+  user-select: none;
+}
+
+details.advanced > summary .codicon {
+  vertical-align: -2px;
+  margin-right: 4px;
+}
+
+.agent-actions {
+  margin-top: 8px;
+}
+
+.grow-spacer {
+  flex: 1 1 auto;
+}
+
+.small.error {
+  color: var(--vscode-errorForeground);
+}
+
+.test-result {
+  border-left: 3px solid var(--vscode-focusBorder);
+  padding-left: 8px;
+}
+
+.test-result.ok {
+  border-left-color: var(--vscode-testing-iconPassed, #388a34);
+}
+
+.test-result.fail {
+  border-left-color: var(--vscode-errorForeground);
+}
+
+.test-result p {
+  margin: 0 0 6px;
+  word-break: break-word;
+}
+
+.test-result .codicon {
+  vertical-align: -2px;
+  margin-right: 4px;
+}
+
+.models {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  max-height: 160px;
+  overflow: auto;
+}
+
 /* --------------------------------------------------------------- controls */
 .button {
   display: inline-flex;

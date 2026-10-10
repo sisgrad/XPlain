@@ -2,7 +2,7 @@
   "name": "xplain",
   "displayName": "XPlain",
   "description": "Explain code with an LLM agent: collect code blocks into a context, send to your agent, and keep explanations anchored to the code.",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "publisher": "xplain",
   "license": "MIT",
   "private": true,
@@ -94,6 +94,12 @@
         "category": "XPlain"
       },
       {
+        "command": "xplain.configureAgent",
+        "title": "Configure Agent (Provider, Model, API Key)",
+        "category": "XPlain",
+        "icon": "$(server-process)"
+      },
+      {
         "command": "xplain.setAgentApiKey",
         "title": "Set Agent API Key",
         "category": "XPlain"
@@ -143,14 +149,19 @@
           "group": "1_settings@1"
         },
         {
-          "command": "xplain.setAgentApiKey",
+          "command": "xplain.configureAgent",
           "when": "view == xplain.panel",
           "group": "1_settings@2"
         },
         {
-          "command": "xplain.openStorageFolder",
+          "command": "xplain.setAgentApiKey",
           "when": "view == xplain.panel",
           "group": "1_settings@3"
+        },
+        {
+          "command": "xplain.openStorageFolder",
+          "when": "view == xplain.panel",
+          "group": "1_settings@4"
         }
       ],
       "editor/context": [
@@ -193,16 +204,68 @@
         "xplain.agent.provider": {
           "type": "string",
           "enum": [
-            "http",
+            "xplain",
+            "hermes",
+            "openai",
+            "anthropic",
             "mock"
           ],
-          "default": "http",
-          "description": "Agent backend. 'http' calls your agent service at xplain.agent.endpoint; 'mock' returns a canned answer (for development)."
+          "enumDescriptions": [
+            "Your own agent service speaking the XPlain HTTP contract (xplain.agent.endpoint).",
+            "Hermes Agent API server (OpenAI-compatible, default http://127.0.0.1:8642/v1).",
+            "OpenAI / Codex models or any OpenAI-compatible Chat Completions server.",
+            "Anthropic Messages API (Claude).",
+            "Built-in offline mock answer (for demos and development)."
+          ],
+          "default": "xplain",
+          "description": "Which backend answers XPlain requests. Configure it in the panel's Agent tab or here."
         },
         "xplain.agent.endpoint": {
           "type": "string",
           "default": "http://127.0.0.1:8765/explain",
-          "description": "HTTP endpoint of your agent system. Receives POST with the context and returns an explanation."
+          "description": "[xplain provider] HTTP endpoint of your agent system. Receives POST with the context and returns an explanation."
+        },
+        "xplain.agent.systemPrompt": {
+          "type": "string",
+          "default": "",
+          "editPresentation": "multilineText",
+          "description": "[hermes/openai/anthropic] Custom system prompt. Empty uses the built-in XPlain prompt (asks for a Markdown answer starting with an H1 title)."
+        },
+        "xplain.agent.hermes.baseUrl": {
+          "type": "string",
+          "default": "http://127.0.0.1:8642/v1",
+          "description": "[hermes] Base URL of the Hermes Agent API server (include /v1). Enable it with API_SERVER_ENABLED=true and API_SERVER_KEY in Hermes."
+        },
+        "xplain.agent.hermes.model": {
+          "type": "string",
+          "default": "hermes-agent",
+          "description": "[hermes] Model name sent to Hermes (profile name; 'hermes-agent' for the default profile)."
+        },
+        "xplain.agent.openai.baseUrl": {
+          "type": "string",
+          "default": "https://api.openai.com/v1",
+          "description": "[openai] Base URL of an OpenAI-compatible API (OpenAI, Ollama, vLLM, LiteLLM...)."
+        },
+        "xplain.agent.openai.model": {
+          "type": "string",
+          "default": "chat-latest",
+          "description": "[openai] Model id, e.g. a Codex/GPT model. Use 'Test connection' in the Agent tab to list available models."
+        },
+        "xplain.agent.anthropic.baseUrl": {
+          "type": "string",
+          "default": "https://api.anthropic.com",
+          "description": "[anthropic] Base URL of the Anthropic API."
+        },
+        "xplain.agent.anthropic.model": {
+          "type": "string",
+          "default": "claude-sonnet-5",
+          "description": "[anthropic] Claude model id."
+        },
+        "xplain.agent.anthropic.maxTokens": {
+          "type": "number",
+          "default": 8192,
+          "minimum": 256,
+          "description": "[anthropic] max_tokens for the answer."
         },
         "xplain.agent.timeoutMs": {
           "type": "number",
@@ -213,7 +276,7 @@
         "xplain.agent.streaming": {
           "type": "boolean",
           "default": true,
-          "description": "Ask the agent for an NDJSON stream (Accept: application/x-ndjson) and render partial output."
+          "description": "Stream partial output (NDJSON for the xplain provider, SSE for hermes/openai/anthropic)."
         },
         "xplain.agent.headers": {
           "type": "object",
@@ -221,7 +284,7 @@
           "additionalProperties": {
             "type": "string"
           },
-          "description": "Extra HTTP headers sent to the agent. The API key (stored securely) is sent as 'Authorization: Bearer <key>' automatically."
+          "description": "Extra HTTP headers sent to any provider. API keys are stored securely (Agent tab) and sent automatically as 'Authorization: Bearer <key>' (or 'x-api-key' for Anthropic)."
         },
         "xplain.editor.showCodeLens": {
           "type": "boolean",

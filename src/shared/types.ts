@@ -67,6 +67,7 @@ export interface SessionContext {
   agent: {
     provider: string;
     endpoint?: string;
+    model?: string;
   };
   status: SessionStatus;
   error?: string;
@@ -138,3 +139,48 @@ export interface BusyState {
 }
 
 export const DEFAULT_DRAFT: DraftState = { items: [], question: '', templateId: null };
+
+/* ------------------------------------------------------------ agent setup */
+
+/** Backends the extension can talk to. */
+export type AgentProviderId = 'xplain' | 'hermes' | 'openai' | 'anthropic' | 'mock';
+
+export const AGENT_PROVIDER_IDS: AgentProviderId[] = ['xplain', 'hermes', 'openai', 'anthropic', 'mock'];
+
+export interface ChatProviderSettings {
+  baseUrl: string;
+  model: string;
+}
+
+/** Everything the Agent tab edits. Secrets are never included, only `hasKey`. */
+export interface AgentSettings {
+  provider: AgentProviderId;
+  /** XPlain-contract endpoint (provider = xplain). */
+  endpoint: string;
+  timeoutMs: number;
+  streaming: boolean;
+  /** Extra headers sent to any provider. */
+  headers: Record<string, string>;
+  /** Empty = built-in default prompt (chat providers only). */
+  systemPrompt: string;
+  hermes: ChatProviderSettings;
+  openai: ChatProviderSettings;
+  anthropic: ChatProviderSettings & { maxTokens: number };
+}
+
+export type SettingsTarget = 'global' | 'workspace';
+
+export interface AgentSettingsView extends AgentSettings {
+  /** Which providers have an API key stored in SecretStorage. */
+  hasKey: Record<AgentProviderId, boolean>;
+  /** Where `xplain.agent.provider` is currently defined. */
+  target: SettingsTarget;
+  hasWorkspace: boolean;
+}
+
+export interface AgentTestResult {
+  provider: AgentProviderId;
+  ok: boolean;
+  message: string;
+  models?: string[];
+}

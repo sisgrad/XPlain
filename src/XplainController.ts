@@ -3,9 +3,8 @@
  * agent calls and result persistence.
  */
 import * as vscode from 'vscode';
-import { AgentError, type AgentItem, type AgentProvider, type AgentRequest } from './agent/AgentProvider';
-import { HttpAgentProvider } from './agent/HttpAgentProvider';
-import { MockAgentProvider } from './agent/MockAgentProvider';
+import { AgentError, type AgentItem, type AgentRequest } from './agent/AgentProvider';
+import { AgentRegistry, PROVIDER_LABELS } from './agent/AgentRegistry';
 import { deriveTitle } from './agent/titles';
 import { ContextDraft } from './context/ContextDraft';
 import { formatRange } from './editor/anchors';
@@ -15,11 +14,10 @@ import { PickMode } from './editor/pickMode';
 import { BackgroundManager } from './panel/background';
 import type { XplainViewProvider } from './panel/XplainViewProvider';
 import type { InitState, ViewMessage } from './shared/protocol';
-import type { BusyState, ContextItem, DraftItem, DraftState, SessionMeta, TemplateFile } from './shared/types';
+import { AGENT_PROVIDER_IDS, type AgentProviderId, type AgentSettings, type BusyState, type ContextItem, type DraftItem, type DraftState, type SessionMeta, type TemplateFile } from './shared/types';
 import type { XplainStore } from './storage/XplainStore';
 import type { VscodeStoreFs } from './storage/vscodeFs';
 
-const API_KEY_SECRET = 'xplain.agent.apiKey';
 const MAX_TEMPLATE_FILE = 1024 * 1024;
 
 interface Deps {
@@ -37,22 +35,10 @@ interface Deps {
 export class XplainController implements vscode.Disposable {
   private readonly disposables: vscode.Disposable[] = [];
   private current: { sessionId: string; abort: AbortController } | undefined;
-  private readonly providers: Record<string, AgentProvider>;
+  private readonly agents: AgentRegistry;
 
   constructor(private readonly d: Deps) {
-    this.providers = {
-      mock: new MockAgentProvider(),
-      http: new HttpAgentProvider(async () => {
-        const cfg = vscode.workspace.getConfiguration('xplain.agent');
-        return {
-          endpoint: cfg.get<string>('endpoint', ''),
-          timeoutMs: cfg.get<number>('timeoutMs', 180000),
-          streaming: cfg.get<boolean>('streaming', true),
-          headers: cfg.get<Record<string, string>>('headers', {}),
-          apiKey: await d.context.secrets.get(API_KEY_SECRET),
-        };
-      }),
-    };
+    this.agents = new AgentRegistry(d.context);
 
     this.disposables.push(
       d.view.onDidReceiveMessage((m) => void this.handleMessage(m)),
@@ -61,7 +47,7 @@ export class XplainController implements vscode.Disposable {
       d.pickMode.onDidChange((active) => d.view.post({ type: 'pickMode', active })),
       vscode.workspace.onDidChangeConfiguration((e) => {
         if (e.affectsConfiguration('xplain.ui.background')) void this.pushBackground();
-        if (e.affectsConfiguration('xplain.agent')) d.view.post({ type: 'agentLabel', label: this.agentLabel() });
+        if (e.affectsConfiguration('xplain.agent')) void this.pushAgentSettings();
       }),
     );
     if (d.store) {
@@ -95,8 +81,15 @@ export class XplainController implements vscode.Disposable {
     reg('xplain.focus', () => this.d.view.reveal(false));
     reg('xplain.setAgentApiKey', () => this.setApiKey());
     reg('xplain.clearAgentApiKey', async () => {
-      await this.d.context.secrets.delete(API_KEY_SECRET);
-      void vscode.window.showInformationMessage('XPlain: agent API key removed.');
+      const provider = await this.pickProvider('Remove the API key of which provider?');
+      if (!provider) return;
+      await this.agents.clearKey(provider);
+      await this.pushAgentSettings();
+      void vscode.window.showInformationMessage(`XPlain: API key for ${PROVIDER_LABELS[provider]} removed.`);
+    });
+    reg('xplain.configureAgent', async () => {
+      await this.d.view.reveal(false);
+      this.d.view.post({ type: 'tab', tab: 'agent' });
     });
     reg('xplain.chooseBackground', async () => {
       if (await this.d.background.choose()) await this.pushBackground();
@@ -198,13 +191,14 @@ export class XplainController implements vscode.Disposable {
 
     const items = await this.buildContextItems(draft);
     const agentItems = await this.buildAgentItems(draft);
-    const provider = this.provider();
+    const settings = this.agents.read();
+    const provider = this.agents.provider(settings);
     const provisionalTitle = deriveTitle({ question: draft.question, format: 'markdown', content: '', items: draft.items });
     const session = await store.createSession({
       title: provisionalTitle,
       question: draft.question,
       items,
-      agent: { provider: provider.id, endpoint: provider.id === 'http' ? vscode.workspace.getConfiguration('xplain.agent').get('endpoint') : undefined },
+      agent: { provider: provider.id, endpoint: agentEndpoint(settings), model: agentModel(settings) },
     });
 
     const abort = new AbortController();
@@ -263,18 +257,15 @@ export class XplainController implements vscode.Disposable {
     this.current?.abort.abort();
   }
 
-  private provider(): AgentProvider {
-    const id = vscode.workspace.getConfiguration('xplain.agent').get<string>('provider', 'http');
-    return this.providers[id] ?? this.providers.http;
+  private async pushAgentSettings(): Promise<void> {
+    this.d.view.post({ type: 'agentSettings', settings: await this.agents.view() });
+    this.d.view.post({ type: 'agentLabel', label: this.agents.label() });
   }
 
-  private agentLabel(): string {
-    const p = this.provider();
-    if (p.id === 'http') {
-      const ep = vscode.workspace.getConfiguration('xplain.agent').get<string>('endpoint', '');
-      return ep ? `HTTP · ${ep}` : 'HTTP · endpoint not set';
-    }
-    return p.label;
+  private async pickProvider(title: string): Promise<AgentProviderId | undefined> {
+    const items = AGENT_PROVIDER_IDS.filter((id) => id !== 'mock').map((id) => ({ label: PROVIDER_LABELS[id], id }));
+    const pick = await vscode.window.showQuickPick(items, { title });
+    return pick?.id;
   }
 
   private async buildContextItems(draft: DraftState): Promise<ContextItem[]> {
@@ -468,7 +459,8 @@ export class XplainController implements vscode.Disposable {
       busy: this.current ? { busy: true, sessionId: this.current.sessionId, label: 'Waiting for agent…' } : { busy: false },
       background: await this.d.background.getState(this.d.view.webview),
       hasWorkspace: Boolean(store),
-      agentLabel: this.agentLabel(),
+      agentLabel: this.agents.label(),
+      agentSettings: await this.agents.view(),
     };
     this.d.view.post({ type: 'init', state });
   }
@@ -585,6 +577,26 @@ export class XplainController implements vscode.Disposable {
         case 'openSettings':
           await vscode.commands.executeCommand('workbench.action.openSettings', '@ext:xplain.xplain');
           break;
+        case 'saveAgentSettings':
+          await this.agents.save(m.settings, m.target);
+          await this.pushAgentSettings();
+          this.d.view.post({ type: 'notice', level: 'info', message: `Agent settings saved (${m.target === 'workspace' ? 'this workspace' : 'user settings'}).` });
+          break;
+        case 'setAgentKey':
+          await this.agents.setKey(m.provider, m.key);
+          await this.pushAgentSettings();
+          this.d.view.post({ type: 'notice', level: 'info', message: m.key.trim() ? `API key for ${PROVIDER_LABELS[m.provider]} saved.` : `API key for ${PROVIDER_LABELS[m.provider]} removed.` });
+          break;
+        case 'clearAgentKey':
+          await this.agents.clearKey(m.provider);
+          await this.pushAgentSettings();
+          break;
+        case 'testAgent': {
+          const result = await this.agents.test(m.settings);
+          this.d.output.appendLine(`[test] ${result.provider}: ${result.ok ? 'ok' : 'failed'} - ${result.message}`);
+          this.d.view.post({ type: 'agentTest', result });
+          break;
+        }
         case 'openExternal':
           if (/^https?:\/\//i.test(m.url)) await vscode.env.openExternal(vscode.Uri.parse(m.url));
           break;
@@ -631,26 +643,46 @@ export class XplainController implements vscode.Disposable {
   }
 
   private async setApiKey(): Promise<void> {
+    const provider = await this.pickProvider('Set the API key of which provider?');
+    if (!provider) return;
     const value = await vscode.window.showInputBox({
-      title: 'XPlain: agent API key',
-      prompt: 'Sent as "Authorization: Bearer <key>" to your agent endpoint. Stored in the secure secret storage.',
+      title: `XPlain: API key for ${PROVIDER_LABELS[provider]}`,
+      prompt:
+        provider === 'anthropic'
+          ? 'Sent as "x-api-key". Stored in the secure secret storage.'
+          : 'Sent as "Authorization: Bearer <key>". Stored in the secure secret storage. Leave empty to remove.',
       password: true,
       ignoreFocusOut: true,
     });
     if (value === undefined) return;
-    if (value.trim()) {
-      await this.d.context.secrets.store(API_KEY_SECRET, value.trim());
-      void vscode.window.showInformationMessage('XPlain: agent API key saved.');
-    } else {
-      await this.d.context.secrets.delete(API_KEY_SECRET);
-      void vscode.window.showInformationMessage('XPlain: agent API key removed.');
-    }
+    await this.agents.setKey(provider, value);
+    await this.pushAgentSettings();
+    void vscode.window.showInformationMessage(
+      value.trim() ? `XPlain: API key for ${PROVIDER_LABELS[provider]} saved.` : `XPlain: API key for ${PROVIDER_LABELS[provider]} removed.`,
+    );
   }
 
   dispose(): void {
     this.cancel();
     this.disposables.forEach((d) => d.dispose());
   }
+}
+
+function agentEndpoint(s: AgentSettings): string | undefined {
+  switch (s.provider) {
+    case 'xplain':
+      return s.endpoint;
+    case 'hermes':
+    case 'openai':
+    case 'anthropic':
+      return s[s.provider].baseUrl;
+    default:
+      return undefined;
+  }
+}
+
+function agentModel(s: AgentSettings): string | undefined {
+  return s.provider === 'hermes' || s.provider === 'openai' || s.provider === 'anthropic' ? s[s.provider].model : undefined;
 }
 
 function safeParseUri(s: string): vscode.Uri | undefined {

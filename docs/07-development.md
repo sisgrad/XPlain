@@ -35,7 +35,9 @@ Extension Development Host с открытой папкой `debug_samples/`. Т
 2. F5. После правок — **Developer: Reload Window** в окне Development Host (Ctrl+R).
 3. Логи хоста — Output → **XPlain**; ошибки webview — **Developer: Open Webview Developer Tools**.
 
-Для проверки без агента: `xplain.agent.provider = mock` или `python3 examples/agent_server.py`.
+Для проверки без агента: вкладка Agent → **Mock (offline)** (или `xplain.agent.provider = mock`), либо
+`python3 examples/agent_server.py` с провайдером **XPlain HTTP agent**. Для проверки чат-провайдеров без
+внешних ключей удобен любой OpenAI-совместимый локальный сервер (Ollama, vLLM) через провайдер **OpenAI**.
 
 ## Структура исходников
 
@@ -44,7 +46,7 @@ src/                  extension host (TypeScript, CommonJS-бандл)
   shared/             типы и протокол, общие с webview (алиас @shared/*)
   storage/            .xplain/, абстракция FS
   editor/             якоря, CodeLens, декорации, pick mode
-  agent/              провайдеры и заголовки
+  agent/              AgentRegistry, провайдеры (xplain/hermes/openai/anthropic/mock), prompt, stream, titles
   panel/              WebviewView, фон
   context/            ContextDraft
   util/
@@ -70,14 +72,19 @@ media/                иконки
 ## Тесты
 
 Юнит-тесты не зависят от `vscode`: хранилище работает через `NodeStoreFs` во временной директории,
-HTTP-провайдер — против реального локального `http.Server`.
+провайдеры — против реального локального `http.Server`.
 
 | Файл | Что проверяет |
 | --- | --- |
 | `test/anchors.test.ts` | нормализация/хеш, `toLineChange`, сдвиги диапазонов, поиск snippet, валидация хеша |
 | `test/store.test.ts` | создание `.xplain`, переиспользование якорей, сессии ↔ якоря, результаты md/html, reload, шаблоны, фон |
-| `test/http.test.ts` | JSON-ответ, NDJSON-стрим с дельтами, `done.content`, не-JSON тело, HTTP-ошибки, таймаут, отмена |
+| `test/http.test.ts` | Провайдер `xplain`: JSON-ответ, NDJSON-стрим с дельтами, `done.content`, не-JSON тело, HTTP-ошибки, таймаут, отмена |
+| `test/chat-providers.test.ts` | `buildChatPrompt` (порядок секций, ограждения, свой system prompt), `joinUrl`, `detectHtml`; OpenAI/Hermes SSE (keepalive, `hermes.tool.progress`, `[DONE]`), JSON-ответ, ошибки API, `/models`; Anthropic SSE/JSON, заголовки, обязательный ключ, `/v1/models` |
 | `test/misc.test.ts` | `deriveTitle`, `ContextDraft`, `isViewMessage` |
+
+`AgentRegistry` импортирует `vscode`, поэтому в mocha не тестируется; его можно проверить smoke-скриптом
+с подменой модуля `vscode` через `Module._load` (стаб `workspace.getConfiguration` с `get/inspect/update`
+и `context.secrets`).
 
 Запуск: `npm test`. Один файл: `npx mocha out/test/anchors.test.js` после `tsc -p tsconfig.test.json`.
 
@@ -92,6 +99,9 @@ HTTP-провайдер — против реального локального
 7. Templates: drop из Explorer и из ОС, сохранение, выбор в Context, передача в запрос.
 8. Фон: выбор файла, drop картинки, настройки opacity/blur/fit, очистка.
 9. HTML-результат (сервер с `format: html`) → iframe в панели, Open in editor.
+10. Вкладка Agent: смена провайдера показывает его поля; Save key → индикатор `saved`, ключа нет в
+    `settings.json`; Test connection против Hermes/Ollama показывает модели, клик по чипу подставляет модель;
+    Save в workspace → `.vscode/settings.json`, футер Context обновился; Send через выбранного провайдера.
 
 ## Соглашения
 
@@ -100,6 +110,13 @@ HTTP-провайдер — против реального локального
 - UI-строки на английском; протокол и типы — в `src/shared/`, менять синхронно с webview.
 - Изменения формата `.xplain/` — поднимать `XplainIndex.version` и писать миграцию в `XplainStore.init`.
 - Коммиты — по фичам; перед коммитом `npm run check && npm run lint && npm test`.
+- **Документация обновляется в том же изменении, что и код.** Любая правка поведения, настроек, команд,
+  протокола, формата хранения или контракта агента сопровождается правкой соответствующих файлов в
+  `docs/` (и `README.md`, если затронут обзор). Изменение без обновлённой документации считается незавершённым.
+- Новый провайдер агента: реализовать `AgentProvider` в `src/agent/`, добавить id в `AGENT_PROVIDER_IDS`
+  и `AgentSettings` (`src/shared/types.ts`), ветки в `AgentRegistry` (`read/save/provider/label/test`),
+  ключи `xplain.agent.<id>.*` в `package.json`, поля формы в `webview/components/AgentTab.tsx`,
+  тесты против локального `http.Server`, разделы в `docs/02`, `03`, `04`.
 
 ## Выпуск версии
 

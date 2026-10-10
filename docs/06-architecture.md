@@ -9,7 +9,8 @@ flowchart LR
   AddCmd --> Draft[ContextDraft]
   Draft <-->|HostMessage / ViewMessage| Panel[XplainViewProvider WebviewView]
   Panel -->|send| Controller[XplainController]
-  Controller --> Agent[AgentProvider http or mock]
+  Controller --> Registry[AgentRegistry settings + secrets]
+  Registry --> Agent[AgentProvider: xplain / hermes / openai / anthropic / mock]
   Agent -->|delta / done| Controller
   Controller --> Store
   Store --> Live[LiveAnchors]
@@ -42,7 +43,12 @@ flowchart LR
 | `editor/decorations.ts` | Gutter-иконка, подсветка, hover с command-ссылками; подсветка блоков текущего контекста |
 | `editor/pickMode.ts` | Флаг pick mode, status bar item, контекстный ключ `xplain.pickMode`, автовыключение |
 | `agent/AgentProvider.ts` | Интерфейс `AgentProvider`, типы `AgentRequest/AgentItem/AgentResponse`, `AgentError` |
-| `agent/HttpAgentProvider.ts` | `fetch` к endpoint, JSON / NDJSON / SSE, таймаут, отмена, заголовки, Bearer-ключ |
+| `agent/AgentRegistry.ts` | Чтение/запись `xplain.agent.*` (`read/view/save`, цель global/workspace, дефолты не записываются), ключи в `SecretStorage` по провайдеру, фабрика провайдера, подпись для футера, `test()` (список моделей / ping) |
+| `agent/stream.ts` | Общие примитивы: `fetchWithTimeout` (таймаут и abort на заголовки и тело), `readLines` (NDJSON), `readSse` (SSE: `event:`/`data:`, многострочные data, комментарии), `joinUrl` |
+| `agent/prompt.ts` | `buildChatPrompt`: контекст → `{system, user}` для чат-моделей (шаблон → результаты → код в fenced-блоках с диапазонами → вопрос), `DEFAULT_SYSTEM_PROMPT`, `detectHtml` |
+| `agent/HttpAgentProvider.ts` | Провайдер `xplain`: `fetch` к endpoint, JSON / NDJSON / SSE по контракту XPlain |
+| `agent/OpenAIChatProvider.ts` | Провайдеры `hermes` и `openai`: Chat Completions, SSE-чанки, пропуск сторонних событий (`hermes.tool.progress`), `listOpenAIModels` |
+| `agent/AnthropicProvider.ts` | Провайдер `anthropic`: Messages API, `content_block_delta`/`text_delta`, `listAnthropicModels` |
 | `agent/MockAgentProvider.ts` | Офлайн-ответ со стримингом для демо и smoke-тестов |
 | `agent/titles.ts` | `deriveTitle`: агент → заголовок md/html → вопрос → файл+диапазон; обрезка до 72 символов |
 | `panel/XplainViewProvider.ts` | `WebviewViewProvider`: HTML-оболочка, CSP с nonce, `localResourceRoots`, очередь сообщений до resolve |
@@ -51,7 +57,7 @@ flowchart LR
 | `util/emitter.ts`, `util/ids.ts` | Мини-эмиттер без зависимости от `vscode`, генерация id, sha1 |
 
 Зависимости направлены «внутрь»: `storage`, `context`, `agent`, `editor/anchors`, `shared`, `util` не
-импортируют `vscode` (кроме `vscodeFs`) и покрываются unit-тестами в Node. Всё, что трогает VS Code,
+импортируют `vscode` (кроме `vscodeFs` и `agent/AgentRegistry`) и покрываются unit-тестами в Node. Всё, что трогает VS Code,
 сосредоточено в `extension.ts`, `XplainController.ts`, `editor/*` (кроме `anchors.ts`) и `panel/*`.
 
 ## Webview
@@ -67,6 +73,7 @@ webview/
     ResultTab.tsx     рендер Markdown / iframe для HTML / потоковый вывод / переименование
     TemplatesTab.tsx  редактор шаблона (имя, инструкция, файлы, drop-zone), список шаблонов
     HistoryTab.tsx    список сессий с фильтром
+    AgentTab.tsx      форма провайдера: выбор, поля, ключ API, Advanced, Save (global/workspace), Test connection
   styles.css          стили на CSS-переменных темы VS Code
 ```
 
@@ -78,17 +85,21 @@ webview/
 Определён в `src/shared/protocol.ts` как discriminated unions.
 
 **Host → Webview (`HostMessage`)**: `init` (полное состояние), `draft`, `sessions`, `templates`, `pickMode`,
-`busy`, `background`, `agentLabel`, `showResult`, `streamStart` / `streamDelta` / `streamEnd`,
-`templateFiles`, `editTemplate`, `tab`, `notice`.
+`busy`, `background`, `agentLabel`, `agentSettings` (`AgentSettingsView`: настройки + `hasKey` по провайдерам +
+`target`), `agentTest`, `showResult`, `streamStart` / `streamDelta` / `streamEnd`, `templateFiles`,
+`editTemplate`, `tab`, `notice`.
 
 **Webview → Host (`ViewMessage`)**: `ready`, `setQuestion`, `setTemplate`, `removeItem`, `moveItem`,
 `clearDraft`, `send`, `cancel`, `openSession`, `openSessionInEditor`, `addSessionToDraft`, `deleteSession`,
 `renameSession`, `revealAnchor`, `togglePickMode`, `saveTemplate`, `deleteTemplate`, `loadTemplateForEdit`,
 `pickTemplateFiles`, `readUris`, `chooseBackground`, `clearBackground`, `dropBackground`, `openSettings`,
-`openExternal`, `log`.
+`saveAgentSettings` (settings + target), `setAgentKey`, `clearAgentKey`, `testAgent`, `openExternal`, `log`.
 
 Принцип: источник истины — хост. Webview отправляет намерение, хост меняет состояние и рассылает
-обновление (`draft`, `sessions`, …). Исключение — локальный текст вопроса (debounce) и черновик шаблона.
+обновление (`draft`, `sessions`, …). Исключение — локальный текст вопроса (debounce), черновик шаблона и
+форма вкладки Agent (локальные правки до нажатия Save; хост присылает `agentSettings` после сохранения и
+при любом изменении `xplain.agent.*` в настройках). Сам ключ API в webview никогда не возвращается —
+только флаг `hasKey`.
 
 ## Ключевые потоки
 
@@ -105,7 +116,9 @@ webview/
 1. `send` → проверка, что нет активного запроса → `store.createSession` (status `pending`, предварительный заголовок).
 2. Формирование `AgentItem[]`: для блоков берётся свежий текст из открытого документа по текущему диапазону якоря;
    для результатов — содержимое `result.*`; для шаблона — инструкция + файлы.
-3. `provider.explain(request, {signal, onDelta})` под `window.withProgress`; дельты транслируются в webview.
+3. `AgentRegistry.read()` → `AgentRegistry.provider(settings)` строит провайдера по `xplain.agent.provider`;
+   `provider.explain(request, {signal, onDelta})` под `window.withProgress`; дельты транслируются в webview.
+   Для чат-провайдеров `buildChatPrompt` превращает `AgentRequest` в system+user сообщения.
 4. Успех → `deriveTitle` → `store.completeSession` → `draft.clear()` → `openResult`.
    Отмена → `deleteSession`. Ошибка → `failSession`, контекст сохраняется.
 

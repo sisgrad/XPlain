@@ -93,13 +93,16 @@
     { "kind": "result", "sessionId": "…", "title": "Pipeline overview" },
     { "kind": "template", "templateId": "…", "name": "CUDA kernel review" }
   ],
-  "agent": { "provider": "http", "endpoint": "http://127.0.0.1:8765/explain" },
+  "agent": { "provider": "hermes", "endpoint": "http://127.0.0.1:8642/v1", "model": "hermes-agent" },
   "status": "done"
 }
 ```
 
 `text` блоков фиксируется на момент отправки — это «снимок» того, что видел агент, даже если код потом
 изменился. Содержимое результатов и файлов шаблона в `context.json` не дублируется (есть ссылки).
+`agent` описывает, кто ответил: `provider` (`xplain` | `hermes` | `openai` | `anthropic` | `mock`;
+в сессиях версии 0.1 — `http`), `endpoint` (endpoint или base URL) и `model` (для чат-провайдеров).
+Ключи API в хранилище не попадают.
 
 ## `sessions/<id>/result.md` / `result.html`
 

@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'preact/hooks';
 import type { HostMessage, InitState, PanelTab } from '@shared/protocol';
 import type {
+  AgentSettingsView,
+  AgentTestResult,
   BackgroundState,
   BusyState,
   DraftState,
@@ -10,6 +12,7 @@ import type {
   TemplateMeta,
 } from '@shared/types';
 import { DEFAULT_DRAFT } from '@shared/types';
+import { AgentTab } from './components/AgentTab';
 import { ContextTab } from './components/ContextTab';
 import { HistoryTab } from './components/HistoryTab';
 import { ResultTab } from './components/ResultTab';
@@ -48,6 +51,9 @@ export function App() {
   const [background, setBackground] = useState<BackgroundState>(EMPTY_BG);
   const [hasWorkspace, setHasWorkspace] = useState(true);
   const [agentLabel, setAgentLabel] = useState('');
+  const [agentSettings, setAgentSettings] = useState<AgentSettingsView | null>(null);
+  const [agentTest, setAgentTest] = useState<AgentTestResult | null>(null);
+  const [agentTesting, setAgentTesting] = useState(false);
   const [result, setResult] = useState<ResultView | null>(null);
   const [stream, setStream] = useState<StreamState | null>(null);
   const [notice, setNotice] = useState<Notice | null>(null);
@@ -115,6 +121,13 @@ export function App() {
         case 'agentLabel':
           setAgentLabel(m.label);
           break;
+        case 'agentSettings':
+          setAgentSettings(m.settings);
+          break;
+        case 'agentTest':
+          setAgentTest(m.result);
+          setAgentTesting(false);
+          break;
         case 'showResult':
           setStream(null);
           setResult({ session: m.session, format: m.format, content: m.content, htmlUri: m.htmlUri });
@@ -156,6 +169,7 @@ export function App() {
       setBackground(s.background);
       setHasWorkspace(s.hasWorkspace);
       setAgentLabel(s.agentLabel);
+      setAgentSettings(s.agentSettings);
     }
   }, [appendTemplateFiles, showNotice]);
 
@@ -247,6 +261,7 @@ export function App() {
         <TabButton id="result" current={tab} onSelect={setTab} icon="book" label="Result" />
         <TabButton id="templates" current={tab} onSelect={setTab} icon="symbol-snippet" label="Templates" />
         <TabButton id="history" current={tab} onSelect={setTab} icon="history" label="History" badge={resultCount || undefined} />
+        <TabButton id="agent" current={tab} onSelect={setTab} icon="server-process" label="Agent" />
       </header>
 
       {pickMode && (
@@ -267,13 +282,14 @@ export function App() {
 
       <main class="content">
         {tab === 'context' && (
-          <ContextTab draft={draft} templates={templates} busy={busy} agentLabel={agentLabel} pickMode={pickMode} />
+          <ContextTab draft={draft} templates={templates} busy={busy} agentLabel={agentLabel} pickMode={pickMode} onConfigureAgent={() => setTab('agent')} />
         )}
         {tab === 'result' && <ResultTab result={result} stream={stream} busy={busy} />}
         {tab === 'templates' && (
           <TemplatesTab templates={templates} editor={editor} setEditor={setEditor} activeTemplateId={draft.templateId} />
         )}
         {tab === 'history' && <HistoryTab sessions={sessions} current={result?.session.id} />}
+        {tab === 'agent' && <AgentTab settings={agentSettings} test={agentTest} testing={agentTesting} onTestStart={() => setAgentTesting(true)} />}
       </main>
 
       {dragOver && (

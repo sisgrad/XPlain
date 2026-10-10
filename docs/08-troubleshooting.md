@@ -36,21 +36,45 @@ Quick Open. Кликните в панель XPlain или Explorer и нажм�
 
 | Сообщение | Причина / действие |
 | --- | --- |
-| `Agent endpoint is not configured` | Задайте `xplain.agent.endpoint` |
-| `Cannot reach agent at …` | Сервис не запущен или недоступен с машины, где работает extension host. При Remote-SSH `127.0.0.1` — это удалённый хост, а не ваш ноутбук; запустите агент там или укажите доступный адрес |
-| `Agent did not respond within N ms` | Увеличьте `xplain.agent.timeoutMs` или включите стриминг на стороне агента |
-| `Agent returned HTTP 401/403` | Нужен ключ: **XPlain: Set Agent API Key**; проверьте заголовки в `xplain.agent.headers` |
-| `Agent returned HTTP 4xx/5xx: …` | Смотрите тело ответа в сообщении и логи своего сервиса |
-| `Agent response has no "content" field` | Ответ должен содержать `content` (или `answer`/`markdown`/`html`) — см. [04-agent-api.md](04-agent-api.md) |
-| `Agent stream finished without any content` | В NDJSON-потоке не было `delta` и `done.content` |
+| `… endpoint is not configured` / `base URL is not configured` / `model is not configured` | Заполните поля во вкладке **Agent** и нажмите Save |
+| `Anthropic: API key is not set` | Вкладка Agent → API key → Save key (ключ обязателен для Anthropic) |
+| `Cannot reach agent at …` | Сервис не запущен или недоступен с машины, где работает extension host. При Remote-SSH `127.0.0.1` — это удалённый хост, а не ваш ноутбук; запустите Hermes/агент там или укажите доступный адрес |
+| `Agent did not respond within N ms` | Увеличьте таймаут (Agent → Advanced → Timeout) или включите стриминг. Для Hermes с инструментами ответ может идти долго — таймаут считается на весь ответ |
+| `HTTP 401/403` / `Invalid API key` / `authentication_error` | Ключ не задан или неверный: Agent → API key → Save key. Для Hermes ключ = `API_SERVER_KEY`. Проверьте, что ключ сохранён именно для выбранного провайдера (индикатор `saved`) |
+| `HTTP 404` у Hermes/OpenAI | Base URL должен заканчиваться на `/v1` (XPlain добавляет `/chat/completions` и `/models`). У Anthropic — наоборот, без `/v1` |
+| `HTTP 4xx/5xx: …` | Смотрите тело ответа в сообщении и логи своего сервиса / Output → XPlain |
+| `… response has no message content` / `empty answer` | Модель вернула пустой ответ; проверьте модель (Test connection покажет доступные) и системный промпт |
+| `Agent response has no "content" field` | [xplain] Ответ должен содержать `content` (или `answer`/`markdown`/`html`) — см. [04-agent-api.md](04-agent-api.md) |
+| `Agent stream finished without any content` | [xplain] В NDJSON-потоке не было `delta` и `done.content` |
 
-Для изоляции проблемы переключите `xplain.agent.provider` на `mock`: если всё работает, дело в сервисе
-или сети. Контракт можно проверить `curl`-ом:
+Для изоляции проблемы переключите провайдера на **Mock (offline)**: если всё работает, дело в сервисе
+или сети. Кнопка **Test connection** во вкладке Agent показывает ту же ошибку, что и запрос, но быстрее.
+Контракт XPlain можно проверить `curl`-ом:
 
 ```bash
 curl -sS -X POST -H 'Content-Type: application/json' -H 'Accept: application/x-ndjson' \
   -d '{"sessionId":"t","question":"ping","items":[]}' http://127.0.0.1:8765/explain
 ```
+
+Hermes API-сервер:
+
+```bash
+curl -sS -H 'Authorization: Bearer <API_SERVER_KEY>' http://127.0.0.1:8642/v1/models
+```
+
+## Вкладка Agent
+
+- **Кнопка Save неактивна** — нет изменений относительно сохранённых настроек.
+- **Форма «откатилась»** — настройки изменились снаружи (`settings.json`, другой инстанс) при отсутствии
+  несохранённых правок; это ожидаемо.
+- **Сохранил в User settings, а в проекте другой провайдер** — проверьте `.vscode/settings.json`:
+  workspace-значения перекрывают пользовательские. Сохранение из вкладки Agent в *User settings* удаляет
+  workspace-переопределения `xplain.agent.*`, но вручную добавленные позже — нет.
+- **«This workspace» недоступно** — открыт одиночный файл без папки.
+- **Test connection для XPlain-контракта «успешен», хотя ответ бессмысленный** — тест проверяет только
+  доступность и формат ответа, а не содержание.
+- **Hermes показывает прогресс инструментов в консоли, а в XPlain — только итог** — события
+  `hermes.tool.progress` намеренно не выводятся; в панель идёт только текст ответа.
 
 ## CodeLens не появляется
 

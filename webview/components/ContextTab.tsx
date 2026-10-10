@@ -8,9 +8,10 @@ interface Props {
   busy: BusyState;
   agentLabel: string;
   pickMode: boolean;
+  onConfigureAgent: () => void;
 }
 
-export function ContextTab({ draft, templates, busy, agentLabel, pickMode }: Props) {
+export function ContextTab({ draft, templates, busy, agentLabel, pickMode, onConfigureAgent }: Props) {
   // Keep the textarea responsive: edit locally, push to the host debounced.
   const [question, setQuestion] = useState(draft.question);
   const lastSent = useRef(draft.question);
@@ -143,8 +144,8 @@ export function ContextTab({ draft, templates, busy, agentLabel, pickMode }: Pro
       </section>
 
       <footer class="send-bar">
-        <div class="agent-label" title="Change in settings: xplain.agent.*">
-          <button class="link" onClick={() => post({ type: 'openSettings' })}>
+        <div class="agent-label" title="Open the Agent tab to change provider, model or API key">
+          <button class="link" onClick={onConfigureAgent}>
             <span class="codicon codicon-plug" /> {agentLabel || 'agent'}
           </button>
         </div>
