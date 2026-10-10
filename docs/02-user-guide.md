@@ -141,7 +141,7 @@ Pick mode выключается повторным Shift+X, кликом по �
 
 | Провайдер | Когда выбирать | Поля |
 | --- | --- | --- |
-| **Hermes Agent** | У вас запущен Hermes harness с API-сервером | Base URL (`http://127.0.0.1:8642/v1`), модель/профиль — выбирается из списка, который отдаёт harness, ключ = `API_SERVER_KEY` из `~/.hermes/.env` |
+| **Hermes Agent** | У вас запущен Hermes harness с API-сервером | Base URL (`http://127.0.0.1:8642/v1` — именно API-сервер, **не** адрес Remote gateway из Hermes Desktop), модель/профиль — выбирается из списка, который отдаёт harness, ключ = `API_SERVER_KEY` из `~/.hermes/.env` |
 | **Anthropic (Claude)** | Прямой доступ к Claude | Base URL (`https://api.anthropic.com`), модель (например `claude-sonnet-5`), `max_tokens`, ключ API (обязателен) |
 | **OpenAI / Codex** | OpenAI-модели, в т.ч. Codex, или совместимый сервер (Ollama, vLLM, LiteLLM, OpenRouter) | Base URL (`https://api.openai.com/v1`), модель, ключ API (для локальных серверов не нужен) |
 | **XPlain HTTP agent** | Собственный сервис/мультиагентная система, реализующая [контракт XPlain](04-agent-api.md#контракт-xplain-provider--xplain) | Endpoint (`POST`), ключ API — опционально |

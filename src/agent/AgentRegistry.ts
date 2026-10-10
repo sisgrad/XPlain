@@ -14,6 +14,7 @@ import {
 } from '../shared/types';
 import { AgentError, type AgentProvider } from './AgentProvider';
 import { AnthropicProvider, listAnthropicModels } from './AnthropicProvider';
+import { describeDashboardMistake, originOf, probeDashboard } from './hermesHints';
 import { HttpAgentProvider } from './HttpAgentProvider';
 import { MockAgentProvider } from './MockAgentProvider';
 import { listOpenAIModels, OpenAIChatProvider } from './OpenAIChatProvider';
@@ -227,8 +228,38 @@ export class AgentRegistry {
       const models = provider === 'anthropic' ? await listAnthropicModels(cfg, signal) : await listOpenAIModels(cfg, signal);
       return { ...base, baseUrl, models };
     } catch (err) {
-      return { ...base, baseUrl, error: err instanceof Error ? err.message : String(err) };
+      let error = err instanceof Error ? err.message : String(err);
+      if (provider === 'hermes') error = await this.explainHermesFailure(baseUrl, error);
+      return { ...base, baseUrl, error };
     }
+  }
+
+  /**
+   * When the Hermes API server does not answer, check whether the URL is actually
+   * the Hermes dashboard (what Hermes Desktop connects to) and say so.
+   */
+  private async explainHermesFailure(baseUrl: string, error: string): Promise<string> {
+    const status = await probeDashboard(baseUrl, AbortSignal.timeout(5_000));
+    if (status) return describeDashboardMistake(baseUrl, status);
+    // Not a dashboard. If the API server port refused the connection, the dashboard might still
+    // tell us where the API server listens; try the default dashboard port on the same host.
+    if (/Cannot reach|ECONNREFUSED|fetch failed/i.test(error)) {
+      const origin = originOf(baseUrl);
+      if (origin) {
+        try {
+          const host = new URL(origin).hostname;
+          for (const port of [9119, 9120]) {
+            const s = await probeDashboard(`http://${host}:${port}`, AbortSignal.timeout(3_000));
+            if (s?.apiServerBase) {
+              return `${error} Hermes on ${host} reports its API server at ${s.apiServerBase} (${s.apiServerState ?? 'state unknown'}); if that is a loopback address, set API_SERVER_HOST=0.0.0.0 in ~/.hermes/.env on ${host} and restart the gateway, or forward the port over SSH.`;
+            }
+          }
+        } catch {
+          /* ignore */
+        }
+      }
+    }
+    return error;
   }
 
   /* ----------------------------------------------------------------- test */

@@ -47,6 +47,7 @@ flowchart LR
 | `agent/stream.ts` | Общие примитивы: `fetchWithTimeout` (таймаут и abort на заголовки и тело), `readLines` (NDJSON), `readSse` (SSE: `event:`/`data:`, многострочные data, комментарии), `joinUrl` |
 | `agent/prompt.ts` | `buildChatPrompt`: контекст → `{system, user}` для чат-моделей (шаблон → результаты → код в fenced-блоках с диапазонами → вопрос), `DEFAULT_SYSTEM_PROMPT`, `detectHtml` |
 | `agent/HttpAgentProvider.ts` | Провайдер `xplain`: `fetch` к endpoint, JSON / NDJSON / SSE по контракту XPlain |
+| `agent/hermesHints.ts` | Распознавание типичной ошибки: Base URL указывает на Hermes dashboard, а не на API-сервер (`GET /api/status` → `gateway_platforms.api_server.listener_base`), текст подсказки с нужным адресом/портом |
 | `agent/OpenAIChatProvider.ts` | Провайдеры `hermes` и `openai`: Chat Completions, SSE-чанки, пропуск сторонних событий (`hermes.tool.progress`), `listOpenAIModels` |
 | `agent/AnthropicProvider.ts` | Провайдер `anthropic`: Messages API, `content_block_delta`/`text_delta`, `listAnthropicModels` |
 | `agent/MockAgentProvider.ts` | Офлайн-ответ со стримингом для демо и smoke-тестов |

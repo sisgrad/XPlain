@@ -4,6 +4,7 @@ import type { AddressInfo } from 'node:net';
 import type { AgentRequest } from '../src/agent/AgentProvider';
 import { AnthropicProvider, listAnthropicModels } from '../src/agent/AnthropicProvider';
 import { listOpenAIModels, OpenAIChatProvider } from '../src/agent/OpenAIChatProvider';
+import { describeDashboardMistake, parseDashboardStatus, probeDashboard } from '../src/agent/hermesHints';
 import { buildChatPrompt, DEFAULT_SYSTEM_PROMPT, detectHtml } from '../src/agent/prompt';
 import { joinUrl } from '../src/agent/stream';
 
@@ -45,6 +46,60 @@ describe('buildChatPrompt', () => {
   it('joins URLs without duplicate slashes', () => {
     assert.equal(joinUrl('http://h/v1/', '/chat/completions'), 'http://h/v1/chat/completions');
     assert.equal(joinUrl('http://h/v1', 'models'), 'http://h/v1/models');
+  });
+});
+
+describe('hermesHints', () => {
+  const dashboardStatus = {
+    version: '0.21.4',
+    gateway_state: 'running',
+    auth_required: true,
+    auth_providers: ['basic'],
+    gateway_platforms: { api_server: { state: 'connected', listener_base: 'http://127.0.0.1:8642' } },
+  };
+
+  it('recognises a Hermes dashboard status document', () => {
+    const s = parseDashboardStatus(dashboardStatus);
+    assert.deepEqual(s, { version: '0.21.4', authRequired: true, apiServerBase: 'http://127.0.0.1:8642', apiServerState: 'connected' });
+    assert.equal(parseDashboardStatus({ data: [] }), undefined);
+    assert.equal(parseDashboardStatus('nope'), undefined);
+  });
+
+  it('explains a loopback-only API server with concrete next steps', () => {
+    const msg = describeDashboardMistake('http://192.168.1.61:9120', parseDashboardStatus(dashboardStatus)!);
+    assert.match(msg, /dashboard\/gateway/);
+    assert.match(msg, /127\.0\.0\.1:8642/);
+    assert.match(msg, /API_SERVER_HOST=0\.0\.0\.0/);
+    assert.match(msg, /http:\/\/192\.168\.1\.61:8642\/v1/);
+    assert.match(msg, /ssh -L 8642:127\.0\.0\.1:8642 192\.168\.1\.61/);
+  });
+
+  it('points at a reachable API server when the dashboard reports one', () => {
+    const msg = describeDashboardMistake('http://box:9119/v1', { apiServerBase: 'http://0.0.0.0:8642', apiServerState: 'connected' });
+    assert.match(msg, /Use http:\/\/0\.0\.0\.0:8642\/v1 as the Base URL/);
+  });
+
+  it('probes /api/status on the origin only', async () => {
+    const server = http.createServer((req, res) => {
+      if (req.url === '/api/status') {
+        res.setHeader('content-type', 'application/json');
+        res.end(JSON.stringify(dashboardStatus));
+      } else {
+        res.statusCode = 302;
+        res.setHeader('location', '/login');
+        res.end();
+      }
+    });
+    await new Promise<void>((r) => server.listen(0, '127.0.0.1', r));
+    const origin = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+    try {
+      const s = await probeDashboard(`${origin}/v1`, AbortSignal.timeout(2000));
+      assert.equal(s?.apiServerBase, 'http://127.0.0.1:8642');
+      assert.equal(await probeDashboard('http://127.0.0.1:1/v1', AbortSignal.timeout(1000)), undefined);
+      assert.equal(await probeDashboard('not a url', AbortSignal.timeout(1000)), undefined);
+    } finally {
+      server.close();
+    }
   });
 });
 

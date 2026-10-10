@@ -44,7 +44,32 @@ hermes api-server            # или hermes gateway с включённым api
 ```
 
 В XPlain: Base URL `http://127.0.0.1:8642/v1`, модель `hermes-agent` (или имя профиля), ключ =
-`API_SERVER_KEY`. Запрос — `POST {baseUrl}/chat/completions` с `stream: true`. Hermes присылает
+`API_SERVER_KEY`.
+
+**Не путать с dashboard/gateway.** У Hermes два разных HTTP-сервиса:
+
+| Сервис | Порт по умолчанию | Кто им пользуется | Аутентификация |
+| --- | --- | --- | --- |
+| Dashboard / gateway (`hermes dashboard`, `hermes serve`) | 9119 | Hermes Desktop (Settings → Gateways → Remote gateway), браузер | логин/пароль или OAuth, cookie-сессия; чат — через WebSocket `/api/ws` |
+| API server (`API_SERVER_*`) | 8642 | OpenAI-совместимые клиенты, **XPlain** | `Authorization: Bearer API_SERVER_KEY` |
+
+Адрес из Hermes Desktop (например `http://192.168.1.61:9120`) — это dashboard; `GET /v1/models` на нём
+отвечает редиректом на `/login`, а `/api/*` — `401 no_cookie`. XPlain распознаёт эту ситуацию: при ошибке
+загрузки моделей для провайдера `hermes` он опрашивает публичный `GET {origin}/api/status` и, если это
+dashboard, сообщает, где по данным самого Hermes слушает API-сервер (`gateway_platforms.api_server.listener_base`)
+и что сделать. Если API-сервер привязан к `127.0.0.1` (значение по умолчанию), с другой машины он
+недоступен; варианты:
+
+```bash
+# на машине Hermes, ~/.hermes/.env
+API_SERVER_ENABLED=true
+API_SERVER_HOST=0.0.0.0        # слушать не только loopback
+API_SERVER_KEY=<ключ>
+# перезапустить gateway; в XPlain: Base URL http://<host>:8642/v1
+
+# либо не открывать порт, а пробросить его по SSH с машины, где работает XPlain:
+ssh -N -L 8642:127.0.0.1:8642 <user>@<host>   # в XPlain: http://127.0.0.1:8642/v1
+``` Запрос — `POST {baseUrl}/chat/completions` с `stream: true`. Hermes присылает
 стандартные чанки `chat.completion.chunk`, свои события `event: hermes.tool.progress` (ход работы
 инструментов — XPlain их пропускает), комментарии `: keepalive` и `data: [DONE]`. В результат попадает
 только итоговый ответ агента. **Test connection** вызывает `GET /v1/models` и показывает профили.

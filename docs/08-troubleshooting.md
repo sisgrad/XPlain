@@ -62,6 +62,17 @@ Hermes API-сервер:
 curl -sS -H 'Authorization: Bearer <API_SERVER_KEY>' http://127.0.0.1:8642/v1/models
 ```
 
+## Hermes: «… is the Hermes dashboard/gateway, not the OpenAI-compatible API server»
+
+Вы указали адрес, который использует Hermes Desktop (Remote gateway, обычно порт 9119/9120). Это
+dashboard с cookie-аутентификацией; XPlain работает с отдельным OpenAI-совместимым API-сервером Hermes
+(порт 8642, `API_SERVER_KEY`). Сообщение XPlain содержит адрес API-сервера, о котором сообщил сам Hermes.
+Если он `127.0.0.1:8642`, с другой машины до него не достучаться — на машине Hermes задайте
+`API_SERVER_HOST=0.0.0.0` (и `API_SERVER_KEY`) в `~/.hermes/.env`, перезапустите gateway и укажите в XPlain
+`http://<host>:8642/v1`; либо пробросьте порт: `ssh -N -L 8642:127.0.0.1:8642 <host>` и используйте
+`http://127.0.0.1:8642/v1`. Проверка: `curl -H 'Authorization: Bearer <API_SERVER_KEY>' http://<host>:8642/v1/models`.
+Подробнее — [04-agent-api.md](04-agent-api.md#hermes-agent).
+
 ## Вкладка Agent
 
 - **Список моделей пуст / «Could not load models»** — сервер недоступен по указанному Base URL с машины
