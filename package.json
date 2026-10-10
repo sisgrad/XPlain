@@ -1,0 +1,293 @@
+{
+  "name": "xplain",
+  "displayName": "XPlain",
+  "description": "Explain code with an LLM agent: collect code blocks into a context, send to your agent, and keep explanations anchored to the code.",
+  "version": "0.1.0",
+  "publisher": "xplain",
+  "license": "MIT",
+  "private": true,
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Other",
+    "Education"
+  ],
+  "keywords": [
+    "explain",
+    "llm",
+    "agent",
+    "documentation"
+  ],
+  "icon": "media/xplain-128.png",
+  "extensionKind": [
+    "workspace"
+  ],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "main": "./dist/extension.js",
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "xplain",
+          "title": "XPlain",
+          "icon": "media/xplain.svg"
+        }
+      ]
+    },
+    "views": {
+      "xplain": [
+        {
+          "type": "webview",
+          "id": "xplain.panel",
+          "name": "XPlain",
+          "icon": "media/xplain.svg",
+          "contextualTitle": "XPlain"
+        }
+      ]
+    },
+    "commands": [
+      {
+        "command": "xplain.addSelectionToContext",
+        "title": "Add Selection to Context",
+        "category": "XPlain",
+        "icon": "$(add)"
+      },
+      {
+        "command": "xplain.togglePickMode",
+        "title": "Toggle Pick Mode (add existing result to context)",
+        "category": "XPlain",
+        "icon": "$(target)"
+      },
+      {
+        "command": "xplain.showResults",
+        "title": "Show Explanations for Block",
+        "category": "XPlain"
+      },
+      {
+        "command": "xplain.openResult",
+        "title": "Open Explanation",
+        "category": "XPlain"
+      },
+      {
+        "command": "xplain.openResultInEditor",
+        "title": "Open Explanation in Editor",
+        "category": "XPlain",
+        "icon": "$(open-preview)"
+      },
+      {
+        "command": "xplain.addResultToContext",
+        "title": "Add Explanation to Context",
+        "category": "XPlain"
+      },
+      {
+        "command": "xplain.clearContext",
+        "title": "Clear Context",
+        "category": "XPlain",
+        "icon": "$(clear-all)"
+      },
+      {
+        "command": "xplain.focus",
+        "title": "Open XPlain Panel",
+        "category": "XPlain"
+      },
+      {
+        "command": "xplain.setAgentApiKey",
+        "title": "Set Agent API Key",
+        "category": "XPlain"
+      },
+      {
+        "command": "xplain.clearAgentApiKey",
+        "title": "Clear Agent API Key",
+        "category": "XPlain"
+      },
+      {
+        "command": "xplain.chooseBackground",
+        "title": "Choose Background Image...",
+        "category": "XPlain",
+        "icon": "$(file-media)"
+      },
+      {
+        "command": "xplain.clearBackground",
+        "title": "Clear Background Image",
+        "category": "XPlain"
+      },
+      {
+        "command": "xplain.openStorageFolder",
+        "title": "Reveal .xplain Folder",
+        "category": "XPlain"
+      }
+    ],
+    "menus": {
+      "view/title": [
+        {
+          "command": "xplain.togglePickMode",
+          "when": "view == xplain.panel",
+          "group": "navigation@1"
+        },
+        {
+          "command": "xplain.chooseBackground",
+          "when": "view == xplain.panel",
+          "group": "navigation@2"
+        },
+        {
+          "command": "xplain.clearContext",
+          "when": "view == xplain.panel",
+          "group": "navigation@3"
+        },
+        {
+          "command": "xplain.clearBackground",
+          "when": "view == xplain.panel",
+          "group": "1_settings@1"
+        },
+        {
+          "command": "xplain.setAgentApiKey",
+          "when": "view == xplain.panel",
+          "group": "1_settings@2"
+        },
+        {
+          "command": "xplain.openStorageFolder",
+          "when": "view == xplain.panel",
+          "group": "1_settings@3"
+        }
+      ],
+      "editor/context": [
+        {
+          "command": "xplain.addSelectionToContext",
+          "when": "editorHasSelection",
+          "group": "xplain@1"
+        }
+      ],
+      "commandPalette": [
+        {
+          "command": "xplain.showResults",
+          "when": "false"
+        },
+        {
+          "command": "xplain.openResult",
+          "when": "false"
+        },
+        {
+          "command": "xplain.addResultToContext",
+          "when": "false"
+        }
+      ]
+    },
+    "keybindings": [
+      {
+        "command": "xplain.addSelectionToContext",
+        "key": "shift+x",
+        "when": "editorTextFocus && editorHasSelection"
+      },
+      {
+        "command": "xplain.togglePickMode",
+        "key": "shift+x",
+        "when": "!editorTextFocus && !inputFocus && !terminalFocus && !findInputFocussed && !inQuickOpen && focusedView != xplain.panel"
+      }
+    ],
+    "configuration": {
+      "title": "XPlain",
+      "properties": {
+        "xplain.agent.provider": {
+          "type": "string",
+          "enum": [
+            "http",
+            "mock"
+          ],
+          "default": "http",
+          "description": "Agent backend. 'http' calls your agent service at xplain.agent.endpoint; 'mock' returns a canned answer (for development)."
+        },
+        "xplain.agent.endpoint": {
+          "type": "string",
+          "default": "http://127.0.0.1:8765/explain",
+          "description": "HTTP endpoint of your agent system. Receives POST with the context and returns an explanation."
+        },
+        "xplain.agent.timeoutMs": {
+          "type": "number",
+          "default": 180000,
+          "minimum": 1000,
+          "description": "Request timeout in milliseconds."
+        },
+        "xplain.agent.streaming": {
+          "type": "boolean",
+          "default": true,
+          "description": "Ask the agent for an NDJSON stream (Accept: application/x-ndjson) and render partial output."
+        },
+        "xplain.agent.headers": {
+          "type": "object",
+          "default": {},
+          "additionalProperties": {
+            "type": "string"
+          },
+          "description": "Extra HTTP headers sent to the agent. The API key (stored securely) is sent as 'Authorization: Bearer <key>' automatically."
+        },
+        "xplain.editor.showCodeLens": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show a CodeLens above every code block that has explanations."
+        },
+        "xplain.editor.highlightBlocks": {
+          "type": "boolean",
+          "default": true,
+          "description": "Highlight code blocks with explanations in the editor gutter."
+        },
+        "xplain.ui.background.opacity": {
+          "type": "number",
+          "default": 0.18,
+          "minimum": 0,
+          "maximum": 1,
+          "description": "Opacity of the panel background image."
+        },
+        "xplain.ui.background.blur": {
+          "type": "number",
+          "default": 0,
+          "minimum": 0,
+          "maximum": 40,
+          "description": "Blur (px) applied to the panel background image."
+        },
+        "xplain.ui.background.fit": {
+          "type": "string",
+          "enum": [
+            "cover",
+            "contain",
+            "tile"
+          ],
+          "default": "cover",
+          "description": "How the background image is fitted into the panel."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "postinstall": "node esbuild.mjs",
+    "build": "node esbuild.mjs",
+    "watch": "node esbuild.mjs --watch",
+    "check": "tsc -p tsconfig.json --noEmit && tsc -p webview/tsconfig.json --noEmit",
+    "lint": "eslint src webview --ext .ts,.tsx",
+    "test": "tsc -p tsconfig.test.json && mocha out/test/**/*.test.js",
+    "package": "node esbuild.mjs --production && vsce package --no-dependencies --out dist/",
+    "install:ide": "bash scripts/install.sh",
+    "vscode:prepublish": "node esbuild.mjs --production"
+  },
+  "dependencies": {
+    "@vscode/codicons": "^0.0.36",
+    "highlight.js": "^11.11.1",
+    "markdown-it": "^14.1.0",
+    "preact": "^10.26.4"
+  },
+  "devDependencies": {
+    "@types/markdown-it": "^14.1.2",
+    "@types/mocha": "^10.0.10",
+    "@types/node": "^20.17.0",
+    "@types/vscode": "~1.85.0",
+    "@typescript-eslint/eslint-plugin": "^8.30.0",
+    "@typescript-eslint/parser": "^8.30.0",
+    "@vscode/vsce": "^3.3.2",
+    "esbuild": "^0.25.2",
+    "eslint": "^8.57.1",
+    "mocha": "^11.1.0",
+    "typescript": "^5.8.3"
+  }
+}
