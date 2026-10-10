@@ -22,7 +22,8 @@ architecture, development, troubleshooting) lives in the `docs/` folder of the r
 ## Workflow
 
 1. Select a block of code and press **Shift+X**. The block appears in the XPlain panel as
-   `file.cu L61-L224`. Repeat for more blocks (sub-ranges are tracked separately).
+   `file.cu L61-L224`. Repeat for more blocks (sub-ranges are tracked separately). On send, the
+   whole file is attached as surrounding context, but the agent is told to explain only the block.
 2. In the panel, optionally type a question, pick a template, choose the explanation language
    (English / Russian), and optionally enable **Draw diagrams with the Excalidraw skill**
    ([coleam00/excalidraw-diagram-skill](https://github.com/coleam00/excalidraw-diagram-skill) —

@@ -300,8 +300,11 @@ export class XplainController implements vscode.Disposable {
   private async buildAgentItems(draft: DraftState): Promise<AgentItem[]> {
     const store = this.d.store!;
     const out: AgentItem[] = [];
+    const fileCache = new Map<string, string | undefined>();
     for (const item of draft.items) {
       if (item.kind === 'code') {
+        if (!fileCache.has(item.file)) fileCache.set(item.file, await this.readWorkspaceFile(item.file));
+        const fileText = fileCache.get(item.file);
         out.push({
           type: 'code',
           file: item.file,
@@ -309,6 +312,7 @@ export class XplainController implements vscode.Disposable {
           endLine: item.endLine,
           language: item.language,
           text: await this.freshText(item),
+          ...(fileText !== undefined ? { fileText } : {}),
         });
       } else {
         const res = await store.readResult(item.sessionId);
@@ -334,6 +338,34 @@ export class XplainController implements vscode.Disposable {
     if (!range) return item.text;
     const text = doc.getText(toRange(doc, range.startLine, range.endLine));
     return text.trim() ? text : item.text;
+  }
+
+  /** Full file text for agent context. Caps size so huge files do not blow the prompt. */
+  private async readWorkspaceFile(rel: string): Promise<string | undefined> {
+    const MAX = 512 * 1024;
+    try {
+      const open = vscode.workspace.textDocuments.find((d) => LiveAnchors.relPath(d.uri) === rel);
+      if (open) {
+        const text = open.getText();
+        if (Buffer.byteLength(text, 'utf8') > MAX) {
+          this.d.output.appendLine(`[send] full file omitted (too large): ${rel}`);
+          return undefined;
+        }
+        return text;
+      }
+      const folders = vscode.workspace.workspaceFolders;
+      if (!folders?.length) return undefined;
+      const uri = vscode.Uri.joinPath(folders[0].uri, ...rel.split('/'));
+      const stat = await vscode.workspace.fs.stat(uri);
+      if (stat.size > MAX) {
+        this.d.output.appendLine(`[send] full file omitted (too large): ${rel} (${stat.size} bytes)`);
+        return undefined;
+      }
+      return Buffer.from(await vscode.workspace.fs.readFile(uri)).toString('utf8');
+    } catch (err) {
+      this.d.output.appendLine(`[send] could not read full file ${rel}: ${err instanceof Error ? err.message : String(err)}`);
+      return undefined;
+    }
   }
 
   /* ----------------------------------------------------------- results (5) */

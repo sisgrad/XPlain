@@ -8,7 +8,14 @@ export type AgentItem =
       startLine: number;
       endLine: number;
       language: string;
+      /** Text of the focus block (the selection to explain). */
       text: string;
+      /**
+       * Full file contents at send time, for surrounding context.
+       * The agent must still explain only `text` / the line range, not the whole file.
+       * Omitted when the file could not be read or was too large.
+       */
+      fileText?: string;
     }
   | {
       type: 'result';

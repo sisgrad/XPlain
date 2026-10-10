@@ -5,33 +5,64 @@ import type { AgentRequest } from '../src/agent/AgentProvider';
 import { AnthropicProvider, listAnthropicModels } from '../src/agent/AnthropicProvider';
 import { listOpenAIModels, OpenAIChatProvider } from '../src/agent/OpenAIChatProvider';
 import { describeDashboardMistake, parseDashboardStatus, probeDashboard } from '../src/agent/hermesHints';
-import { buildChatPrompt, DEFAULT_SYSTEM_PROMPT, detectHtml } from '../src/agent/prompt';
+import { buildChatPrompt, DEFAULT_SYSTEM_PROMPT, detectHtml, formatCodeSections } from '../src/agent/prompt';
 import { joinUrl } from '../src/agent/stream';
 
 const request: AgentRequest = {
   sessionId: 's1',
   question: 'What does this do?',
   items: [
-    { type: 'code', file: 'src/a.ts', startLine: 3, endLine: 4, language: 'typescript', text: 'const a = 1;\nconst b = `x`;' },
+    {
+      type: 'code',
+      file: 'src/a.ts',
+      startLine: 3,
+      endLine: 4,
+      language: 'typescript',
+      text: 'const a = 1;\nconst b = `x`;',
+      fileText: 'line1\nline2\nconst a = 1;\nconst b = `x`;\nline5\n',
+    },
     { type: 'result', title: 'Earlier answer', format: 'markdown', content: '# Earlier\nsome text' },
     { type: 'template', name: 'Review', instruction: 'Be strict.', files: [{ name: 'rules.md', content: '- no any' }] },
   ],
 };
 
 describe('buildChatPrompt', () => {
-  it('uses the default system prompt and lays out templates, results, code and question', () => {
+  it('uses the default system prompt and lays out templates, results, focus blocks, full files and question', () => {
     const p = buildChatPrompt(request);
     assert.equal(p.system, DEFAULT_SYSTEM_PROMPT.trim());
     const lang = p.user.indexOf('## Language');
     const t = p.user.indexOf('Be strict.');
     const r = p.user.indexOf('Earlier answer');
-    const c = p.user.indexOf('src/a.ts');
+    const scope = p.user.indexOf('## Scope');
+    const focus = p.user.indexOf('## Focus block');
+    const full = p.user.indexOf('## Full file');
     const q = p.user.indexOf('What does this do?');
-    assert.ok(lang >= 0 && t > lang && r > t && c > r && q > c, p.user);
+    assert.ok(lang >= 0 && t > lang && r > t && scope > r && focus > scope && full > focus && q > full, p.user);
     assert.match(p.user, /entire.*explanation in \*\*English\*\*/i);
+    assert.match(p.user, /Explain \*\*only\*\* the focus block/);
     assert.match(p.user, /L3-L4/);
     assert.match(p.user, /```typescript/);
     assert.match(p.user, /rules\.md/);
+    assert.match(p.user, /line1/);
+    assert.match(p.system, /Explain ONLY the focus block/);
+  });
+
+  it('deduplicates full files when several focus blocks share a path', () => {
+    const sections = formatCodeSections([
+      { type: 'code', file: 'f.ts', startLine: 1, endLine: 1, language: 'typescript', text: 'a', fileText: 'a\nb\nc' },
+      { type: 'code', file: 'f.ts', startLine: 3, endLine: 3, language: 'typescript', text: 'c', fileText: 'a\nb\nc' },
+    ]).join('\n');
+    assert.equal((sections.match(/## Full file/g) ?? []).length, 1);
+    assert.match(sections, /Focus range\(s\) in this file: \*\*L1-L1, L3-L3\*\*/);
+    assert.equal((sections.match(/```typescript\na\nb\nc/g) ?? []).length, 1);
+  });
+
+  it('skips the full-file section when fileText is missing', () => {
+    const sections = formatCodeSections([
+      { type: 'code', file: 'f.ts', startLine: 1, endLine: 1, language: 'typescript', text: 'a' },
+    ]).join('\n');
+    assert.match(sections, /## Focus block/);
+    assert.doesNotMatch(sections, /## Full file/);
   });
 
   it('asks for Russian when explainLanguage is ru', () => {

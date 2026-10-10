@@ -7,12 +7,15 @@ import type { ExplainLanguage } from '../shared/types';
 import { excalidrawAgentInstructions } from '../skills/excalidrawInstructions';
 import type { AgentItem, AgentRequest } from './AgentProvider';
 
+export type CodeAgentItem = Extract<AgentItem, { type: 'code' }>;
+
 export const DEFAULT_SYSTEM_PROMPT = `You are XPlain, an expert code explainer embedded in a code editor.
-The user sends one or more code blocks (with file paths and line numbers), optionally earlier explanations, reference material from a template, and a question.
+The user sends one or more focus code blocks (with file paths and line numbers). For each focus block the complete source file may also be included as surrounding context.
 
 Rules:
 - Start your answer with a single Markdown H1 line: a concise, specific title (max 8 words) that summarises this explanation like a chat title. Do not use generic titles.
 - Answer in well-structured Markdown: short sections, bullet points where useful, fenced code blocks with a language tag for code.
+- Explain ONLY the focus block(s) (the marked line ranges). Use the full file only as context to understand callers, types, helpers and surrounding code — do not write a line-by-line explanation of the entire file unless the user explicitly asks for that.
 - Refer to code by file and line numbers (e.g. "L192-L221") when it helps.
 - If a template instruction is present, follow it. Treat template files as reference material, not as code to explain unless asked.
 - Be precise and technical; do not pad the answer. If something cannot be determined from the given code, say so.
@@ -25,7 +28,7 @@ export interface ChatPrompt {
 
 export function buildChatPrompt(request: AgentRequest, systemPrompt?: string): ChatPrompt {
   const parts: string[] = [];
-  const codes = request.items.filter((i): i is Extract<AgentItem, { type: 'code' }> => i.type === 'code');
+  const codes = request.items.filter((i): i is CodeAgentItem => i.type === 'code');
   const results = request.items.filter((i): i is Extract<AgentItem, { type: 'result' }> => i.type === 'result');
   const templates = request.items.filter((i): i is Extract<AgentItem, { type: 'template' }> => i.type === 'template');
 
@@ -47,14 +50,18 @@ export function buildChatPrompt(request: AgentRequest, systemPrompt?: string): C
   }
 
   if (codes.length) {
-    parts.push(codes.length === 1 ? '## Code' : `## Code (${codes.length} blocks)`);
-    for (const c of codes) {
-      parts.push(`### ${c.file} L${c.startLine}-L${c.endLine}\n${fence(c.text, c.language)}`);
-    }
+    parts.push(...formatCodeSections(codes));
   }
 
   const q = request.question.trim();
-  parts.push(`## Question\n${q || (codes.length ? 'Explain this code: what it does, how it works, and anything non-obvious or risky.' : 'Please help with the material above.')}`);
+  parts.push(
+    `## Question\n${
+      q ||
+      (codes.length
+        ? 'Explain the focus block(s) above: what they do, how they work, and anything non-obvious or risky. Use the full file(s) only as surrounding context.'
+        : 'Please help with the material above.')
+    }`,
+  );
 
   if (request.workspace) parts.unshift(`Workspace: ${request.workspace}`);
 
@@ -62,6 +69,49 @@ export function buildChatPrompt(request: AgentRequest, systemPrompt?: string): C
     system: (systemPrompt?.trim() || DEFAULT_SYSTEM_PROMPT).trim(),
     user: parts.join('\n\n'),
   };
+}
+
+/** Builds the focus-blocks + full-file-context sections for the user message. */
+export function formatCodeSections(codes: CodeAgentItem[]): string[] {
+  const parts: string[] = [];
+  parts.push(
+    [
+      '## Scope',
+      'Explain **only** the focus block(s) listed below (their exact line ranges).',
+      'Complete source files are included solely as surrounding context so you can resolve names, types, callers and nearby code.',
+      'Do **not** explain the entire file line-by-line unless the question explicitly asks for that.',
+    ].join('\n'),
+  );
+
+  parts.push(codes.length === 1 ? '## Focus block (explain this)' : `## Focus blocks (explain these · ${codes.length})`);
+  for (const c of codes) {
+    parts.push(`### ${c.file} L${c.startLine}-L${c.endLine}\n${fence(c.text, c.language)}`);
+  }
+
+  const files = uniqueFilesWithText(codes);
+  if (files.length) {
+    parts.push(files.length === 1 ? '## Full file (context only)' : `## Full files (context only · ${files.length})`);
+    for (const f of files) {
+      const blocks = codes.filter((c) => c.file === f.file);
+      const ranges = blocks.map((c) => `L${c.startLine}-L${c.endLine}`).join(', ');
+      parts.push(
+        `### ${f.file}\nFocus range(s) in this file: **${ranges}**. The file below is context — explain the focus range(s), not the whole file.\n${fence(f.fileText, f.language)}`,
+      );
+    }
+  }
+
+  return parts;
+}
+
+function uniqueFilesWithText(codes: CodeAgentItem[]): Array<{ file: string; language: string; fileText: string }> {
+  const seen = new Set<string>();
+  const out: Array<{ file: string; language: string; fileText: string }> = [];
+  for (const c of codes) {
+    if (!c.fileText || seen.has(c.file)) continue;
+    seen.add(c.file);
+    out.push({ file: c.file, language: c.language, fileText: c.fileText });
+  }
+  return out;
 }
 
 export function languageInstruction(lang: ExplainLanguage | undefined): string {

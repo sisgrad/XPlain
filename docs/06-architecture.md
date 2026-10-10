@@ -45,7 +45,7 @@ flowchart LR
 | `agent/AgentProvider.ts` | Интерфейс `AgentProvider`, типы `AgentRequest/AgentItem/AgentResponse`, `AgentError` |
 | `agent/AgentRegistry.ts` | Чтение/запись `xplain.agent.*` (`read/view/save`, цель global/workspace, дефолты не записываются), ключи в `SecretStorage` по провайдеру, фабрика провайдера, подпись для футера, `listModels()` (`GET /models` для чат-провайдеров), `test()` (список моделей / ping) |
 | `agent/stream.ts` | Общие примитивы: `fetchWithTimeout` (таймаут и abort на заголовки и тело), `readLines` (NDJSON), `readSse` (SSE: `event:`/`data:`, многострочные data, комментарии), `joinUrl` |
-| `agent/prompt.ts` | `buildChatPrompt`: язык + (опц.) диаграммы + шаблон → результаты → код → вопрос; `DEFAULT_SYSTEM_PROMPT`, `detectHtml` |
+| `agent/prompt.ts` | `buildChatPrompt`: язык + (опц.) диаграммы + шаблон → результаты → Scope/Focus blocks + Full files (context) → вопрос; `DEFAULT_SYSTEM_PROMPT`, `detectHtml` |
 | `skills/excalidrawInstructions.ts` | Текст инструкций для агента (без `vscode`) |
 | `skills/excalidraw.ts` | Копирование bundled-скилла `skills/excalidraw-diagram/` → `.claude/skills/excalidraw-diagram/` |
 | `agent/HttpAgentProvider.ts` | Провайдер `xplain`: `fetch` к endpoint, JSON / NDJSON / SSE по контракту XPlain |
@@ -117,11 +117,11 @@ webview/
 ### Отправка
 
 1. `send` → проверка, что нет активного запроса → `store.createSession` (status `pending`, предварительный заголовок).
-2. Формирование `AgentItem[]`: для блоков берётся свежий текст из открытого документа по текущему диапазону якоря;
-   для результатов — содержимое `result.*`; для шаблона — инструкция + файлы.
+2. Формирование `AgentItem[]`: для блоков — свежий текст фокус-диапазона и полный `fileText` файла
+   (кэш по пути; пропуск если файл > 512 КБ); для результатов — `result.*`; для шаблона — инструкция + файлы.
 3. `AgentRegistry.read()` → `AgentRegistry.provider(settings)` строит провайдера по `xplain.agent.provider`;
    `provider.explain(request, {signal, onDelta})` под `window.withProgress`; дельты транслируются в webview.
-   Для чат-провайдеров `buildChatPrompt` превращает `AgentRequest` в system+user сообщения.
+   Для чат-провайдеров `buildChatPrompt` собирает system+user: фокус-блоки отдельно, полные файлы как context only.
 4. Успех → `deriveTitle` → `store.completeSession` → `draft.clear()` → `openResult`.
    Отмена → `deleteSession`. Ошибка → `failSession`, контекст сохраняется.
 

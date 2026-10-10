@@ -139,11 +139,18 @@ Authorization: Bearer <ключ>                       # если задан к�
 {
   "type": "code",
   "file": "debug_samples/4_warp_specialization.cu",  // путь относительно корня workspace, POSIX
-  "startLine": 192, "endLine": 221,                   // 1-based, включительно
+  "startLine": 192, "endLine": 221,                   // 1-based, включительно — фокус объяснения
   "language": "cuda",                                 // languageId VS Code
-  "text": "for (int kv_tile = 0; ...\n  ..."          // актуальный текст блока на момент отправки
+  "text": "for (int kv_tile = 0; ...\n  ...",         // текст фокус-блока на момент отправки
+  "fileText": "// entire file contents...\n"          // полный файл как контекст (опционально)
 }
 ```
+
+`fileText` — весь файл на момент Send (один раз на путь, даже если в контексте несколько блоков из
+него). Агент должен объяснять **только** диапазон `startLine`–`endLine` / поле `text`; полный файл —
+окружающий контекст (типы, вызывающий код, соседи). Если файл не прочитан или больше 512 КБ, поле
+опускается. Для чат-провайдеров XPlain дополнительно пишет секции `## Scope`, `## Focus block(s)` и
+`## Full file(s) (context only)` в user-сообщении.
 
 Ранее полученный результат (добавлен через pick mode / «Add to context»):
 
