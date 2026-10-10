@@ -274,6 +274,16 @@ export function App() {
           <span class="codicon codicon-target" /> Pick mode: click an XPlain CodeLens in the editor to add one of its explanations to the context. Shift+X to cancel.
         </div>
       )}
+      {busy.busy && (
+        <div class="banner busy-bar" role="status">
+          <span class="busy-bar-text">
+            <span class="codicon codicon-loading codicon-modifier-spin" /> {busy.label || 'Waiting for the agent…'}
+          </span>
+          <button class="button secondary small stop-btn" onClick={() => post({ type: 'cancel' })} title="Abort the request (also stops the agent)">
+            <span class="codicon codicon-debug-stop" /> Stop
+          </button>
+        </div>
+      )}
       {!hasWorkspace && (
         <div class="banner warn">
           <span class="codicon codicon-warning" /> Open a folder to enable XPlain storage (.xplain/).

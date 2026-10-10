@@ -80,6 +80,7 @@ export class XplainController implements vscode.Disposable {
     reg('xplain.addResultToContext', (sessionId) => this.addResultToDraft(String(sessionId)));
     reg('xplain.clearContext', () => this.d.draft.clear());
     reg('xplain.focus', () => this.d.view.reveal(false));
+    reg('xplain.cancelRequest', () => this.cancel());
     reg('xplain.setAgentApiKey', () => this.setApiKey());
     reg('xplain.clearAgentApiKey', async () => {
       const provider = await this.pickProvider('Remove the API key of which provider?');
@@ -237,12 +238,14 @@ export class XplainController implements vscode.Disposable {
 
     try {
       const response = await vscode.window.withProgress(
-        { location: vscode.ProgressLocation.Window, title: 'XPlain: waiting for agent', cancellable: false },
-        () =>
-          provider.explain(request, {
+        { location: vscode.ProgressLocation.Window, title: 'XPlain: waiting for agent', cancellable: true },
+        (progress, token) => {
+          token.onCancellationRequested(() => this.cancel());
+          return provider.explain(request, {
             signal: abort.signal,
             onDelta: (text) => this.d.view.post({ type: 'streamDelta', sessionId: session.id, text }),
-          }),
+          });
+        },
       );
       const title = deriveTitle({
         agentTitle: response.title,
@@ -261,7 +264,7 @@ export class XplainController implements vscode.Disposable {
       this.d.view.post({ type: 'streamEnd', sessionId: session.id });
       if (abort.signal.aborted) {
         await store.deleteSession(session.id);
-        this.d.view.post({ type: 'notice', level: 'info', message: 'Request cancelled.' });
+        this.d.view.post({ type: 'notice', level: 'info', message: 'Request stopped.' });
       } else {
         await store.failSession(session.id, message);
         this.d.view.post({ type: 'notice', level: 'error', message });
@@ -274,7 +277,9 @@ export class XplainController implements vscode.Disposable {
   }
 
   cancel(): void {
-    this.current?.abort.abort();
+    if (!this.current) return;
+    this.d.output.appendLine(`[cancel] session ${this.current.sessionId}: user stop`);
+    this.current.abort.abort();
   }
 
   private async pushAgentSettings(): Promise<void> {
@@ -522,6 +527,7 @@ export class XplainController implements vscode.Disposable {
   }
 
   private setBusy(busy: BusyState): void {
+    void vscode.commands.executeCommand('setContext', 'xplain.busy', busy.busy);
     this.d.view.post({ type: 'busy', busy });
   }
 
@@ -728,6 +734,7 @@ export class XplainController implements vscode.Disposable {
 
   dispose(): void {
     this.cancel();
+    void vscode.commands.executeCommand('setContext', 'xplain.busy', false);
     this.disposables.forEach((d) => d.dispose());
   }
 }

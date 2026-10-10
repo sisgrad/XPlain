@@ -175,7 +175,8 @@ export interface AgentSettings {
   provider: AgentProviderId;
   /** XPlain-contract endpoint (provider = xplain). */
   endpoint: string;
-  timeoutMs: number;
+  /** Idle timeout in whole minutes (UI + settings). Converted to ms for HTTP. */
+  timeoutMinutes: number;
   streaming: boolean;
   /** Extra headers sent to any provider. */
   headers: Record<string, string>;

@@ -39,8 +39,8 @@ Quick Open. Кликните в панель XPlain или Explorer и нажм�
 | `… endpoint is not configured` / `base URL is not configured` / `model is not configured` | Заполните поля во вкладке **Agent** и нажмите Save |
 | `Anthropic: API key is not set` | Вкладка Agent → API key → Save key (ключ обязателен для Anthropic) |
 | `Cannot reach agent at …` | Сервис не запущен или недоступен с машины, где работает extension host. При Remote-SSH `127.0.0.1` — это удалённый хост, а не ваш ноутбук; запустите Hermes/агент там или укажите доступный адрес |
-| `Agent did not respond within N ms` | Агент не отдал заголовки ответа за idle-таймаут. Проверьте, что сервис запущен, и увеличьте Timeout во вкладке Agent. |
-| `Agent went idle for N ms (no data)…` | Пока шло тело ответа, дольше `timeoutMs` не пришло ни одного байта — XPlain сделал abort (нагрузка на GPU у Hermes при этом пропадает). С версии с idle-таймаутом любые чанки (включая `: keepalive` и `hermes.tool.progress`) сбрасывают таймер; если Hermes молчит во время долгого tool-вызова, поднимите `xplain.agent.timeoutMs` (по умолчанию 10 мин) |
+| `Agent did not respond within N minute(s)` | Агент не отдал заголовки ответа за idle-таймаут. Проверьте сервис; увеличьте **Idle timeout, minutes** во вкладке Agent (по умолчанию 10). |
+| `Agent went idle for N minute(s) (no data)…` | Дольше idle-таймаута не пришло ни одного байта тела — XPlain сделал abort (GPU у Hermes при этом гаснет). Keepalive / `hermes.tool.progress` сбрасывают таймер; если Hermes молчит во время tool-вызова, поднимите `xplain.agent.timeoutMinutes` |
 | `HTTP 401/403` / `Invalid API key` / `authentication_error` | Ключ не задан или неверный: Agent → API key → Save key. Для Hermes ключ = `API_SERVER_KEY`. Проверьте, что ключ сохранён именно для выбранного провайдера (индикатор `saved`) |
 | `HTTP 404` у Hermes/OpenAI | Base URL должен заканчиваться на `/v1` (XPlain добавляет `/chat/completions` и `/models`). У Anthropic — наоборот, без `/v1` |
 | `HTTP 4xx/5xx: …` | Смотрите тело ответа в сообщении и логи своего сервиса / Output → XPlain |

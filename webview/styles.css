@@ -138,6 +138,27 @@ textarea {
   border-bottom: 1px solid var(--vscode-inputValidation-errorBorder);
 }
 
+.banner.busy-bar {
+  cursor: default;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  background: color-mix(in srgb, var(--vscode-button-background) 22%, var(--vscode-sideBar-background));
+  border-bottom: 1px solid var(--vscode-focusBorder);
+}
+
+.busy-bar-text {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.busy-bar .stop-btn {
+  flex: none;
+}
+
 /* --------------------------------------------------------------- content */
 .content {
   flex: 1 1 auto;

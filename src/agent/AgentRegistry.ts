@@ -33,7 +33,7 @@ export const PROVIDER_LABELS: Record<AgentProviderId, string> = {
 export const DEFAULT_SETTINGS: AgentSettings = {
   provider: 'xplain',
   endpoint: 'http://127.0.0.1:8765/explain',
-  timeoutMs: 600000,
+  timeoutMinutes: 10,
   streaming: true,
   headers: {},
   systemPrompt: '',
@@ -58,7 +58,7 @@ export class AgentRegistry {
     return {
       provider: normalizeProviderId(cfg.get<string>('provider', d.provider)),
       endpoint: cfg.get<string>('endpoint', d.endpoint),
-      timeoutMs: cfg.get<number>('timeoutMs', d.timeoutMs),
+      timeoutMinutes: readTimeoutMinutes(cfg, d.timeoutMinutes),
       streaming: cfg.get<boolean>('streaming', d.streaming),
       headers: cfg.get<Record<string, string>>('headers', {}) ?? {},
       systemPrompt: cfg.get<string>('systemPrompt', ''),
@@ -94,7 +94,7 @@ export class AgentRegistry {
     const entries: Array<[string, unknown, unknown]> = [
       ['provider', settings.provider, d.provider],
       ['endpoint', settings.endpoint.trim(), d.endpoint],
-      ['timeoutMs', clampInt(settings.timeoutMs, 1000, 3_600_000, d.timeoutMs), d.timeoutMs],
+      ['timeoutMinutes', clampInt(settings.timeoutMinutes, 1, 180, d.timeoutMinutes), d.timeoutMinutes],
       ['streaming', Boolean(settings.streaming), d.streaming],
       ['headers', sanitizeHeaders(settings.headers), {}],
       ['systemPrompt', settings.systemPrompt ?? '', ''],
@@ -112,6 +112,8 @@ export class AgentRegistry {
       const same = JSON.stringify(value) === JSON.stringify(def) && key !== 'provider';
       await cfg.update(key, same ? undefined : value, t);
     }
+    // Drop the pre-minutes setting wherever it was stored.
+    await cfg.update('timeoutMs', undefined, t);
     if (target === 'workspace') {
       // Make sure a stale global value does not shadow anything confusing.
       return;
@@ -121,6 +123,9 @@ export class AgentRegistry {
       for (const [key] of entries) {
         const info = cfg.inspect(key);
         if (info?.workspaceValue !== undefined) await cfg.update(key, undefined, vscode.ConfigurationTarget.Workspace);
+      }
+      if (cfg.inspect('timeoutMs')?.workspaceValue !== undefined) {
+        await cfg.update('timeoutMs', undefined, vscode.ConfigurationTarget.Workspace);
       }
     }
   }
@@ -159,7 +164,7 @@ export class AgentRegistry {
         return new OpenAIChatProvider('hermes', PROVIDER_LABELS.hermes, async () => ({
           ...settings.hermes,
           apiKey: await this.getKey('hermes'),
-          timeoutMs: settings.timeoutMs,
+          timeoutMs: minutesToMs(settings.timeoutMinutes),
           streaming: settings.streaming,
           headers: settings.headers,
           systemPrompt: settings.systemPrompt,
@@ -168,7 +173,7 @@ export class AgentRegistry {
         return new OpenAIChatProvider('openai', PROVIDER_LABELS.openai, async () => ({
           ...settings.openai,
           apiKey: await this.getKey('openai'),
-          timeoutMs: settings.timeoutMs,
+          timeoutMs: minutesToMs(settings.timeoutMinutes),
           streaming: settings.streaming,
           headers: settings.headers,
           systemPrompt: settings.systemPrompt,
@@ -177,7 +182,7 @@ export class AgentRegistry {
         return new AnthropicProvider(async () => ({
           ...settings.anthropic,
           apiKey: await this.getKey('anthropic'),
-          timeoutMs: settings.timeoutMs,
+          timeoutMs: minutesToMs(settings.timeoutMinutes),
           streaming: settings.streaming,
           headers: settings.headers,
           systemPrompt: settings.systemPrompt,
@@ -186,7 +191,7 @@ export class AgentRegistry {
       default:
         return new HttpAgentProvider(async () => ({
           endpoint: settings.endpoint,
-          timeoutMs: settings.timeoutMs,
+          timeoutMs: minutesToMs(settings.timeoutMinutes),
           streaming: settings.streaming,
           headers: settings.headers,
           apiKey: await this.getKey('xplain'),
@@ -215,7 +220,7 @@ export class AgentRegistry {
   /** Ask the provider's server which models it offers (hermes/openai/anthropic only). */
   async listModels(settings: AgentSettings, requestId = 0): Promise<AgentModelsResult> {
     const provider = settings.provider;
-    const timeoutMs = Math.min(settings.timeoutMs, 15_000);
+    const timeoutMs = Math.min(minutesToMs(settings.timeoutMinutes), 15_000);
     const signal = AbortSignal.timeout(timeoutMs);
     const base = { requestId, provider, models: [] as string[] };
     if (provider !== 'hermes' && provider !== 'openai' && provider !== 'anthropic') {
@@ -265,7 +270,7 @@ export class AgentRegistry {
   /* ----------------------------------------------------------------- test */
 
   async test(settings: AgentSettings): Promise<AgentTestResult> {
-    const timeoutMs = Math.min(settings.timeoutMs, 20_000);
+    const timeoutMs = Math.min(minutesToMs(settings.timeoutMinutes), 20_000);
     const signal = AbortSignal.timeout(timeoutMs);
     const provider = settings.provider;
     try {
@@ -291,7 +296,7 @@ export class AgentRegistry {
         default: {
           if (!settings.endpoint) throw new AgentError('Endpoint is empty.');
           // The XPlain contract has no discovery endpoint; probe with an empty, harmless request.
-          const p = this.provider({ ...settings, timeoutMs });
+          const p = this.provider({ ...settings, timeoutMinutes: 1 });
           const res = await p.explain({ sessionId: 'xplain-test', question: 'ping (connection test from XPlain; reply briefly)', items: [] }, { signal });
           return { provider, ok: true, message: `Agent answered (${res.format}, ${res.content.length} chars).` };
         }
@@ -300,6 +305,23 @@ export class AgentRegistry {
       return { provider, ok: false, message: err instanceof Error ? err.message : String(err) };
     }
   }
+}
+
+export function minutesToMs(minutes: number): number {
+  return Math.max(1, Math.round(minutes)) * 60_000;
+}
+
+/** Prefer `timeoutMinutes`; migrate legacy `timeoutMs` (rounded up to whole minutes). */
+function readTimeoutMinutes(cfg: vscode.WorkspaceConfiguration, fallback: number): number {
+  const inspected = cfg.inspect<number>('timeoutMinutes');
+  if (inspected?.workspaceValue !== undefined) return clampInt(inspected.workspaceValue, 1, 180, fallback);
+  if (inspected?.workspaceFolderValue !== undefined) return clampInt(inspected.workspaceFolderValue, 1, 180, fallback);
+  if (inspected?.globalValue !== undefined) return clampInt(inspected.globalValue, 1, 180, fallback);
+  const legacy = cfg.get<number>('timeoutMs');
+  if (typeof legacy === 'number' && Number.isFinite(legacy) && legacy > 0) {
+    return clampInt(Math.ceil(legacy / 60_000), 1, 180, fallback);
+  }
+  return fallback;
 }
 
 function clampInt(v: unknown, lo: number, hi: number, def: number): number {

@@ -122,7 +122,7 @@ system prompt that asks for a Markdown answer starting with a short `#` title; o
 | `xplain.agent.openai.baseUrl` / `model` | `https://api.openai.com/v1` / `chat-latest` | [openai] API base and model id. |
 | `xplain.agent.anthropic.baseUrl` / `model` / `maxTokens` | `https://api.anthropic.com` / `claude-sonnet-5` / `8192` | [anthropic] API base, model, `max_tokens`. |
 | `xplain.agent.systemPrompt` | `""` | [hermes/openai/anthropic] Custom system prompt; empty = built-in. |
-| `xplain.agent.timeoutMs` | `600000` | Idle timeout (resets on every received chunk / keepalive). |
+| `xplain.agent.timeoutMinutes` | `10` | Idle timeout in minutes (resets on every received chunk / keepalive). |
 | `xplain.agent.streaming` | `true` | Stream partial output (NDJSON or SSE). |
 | `xplain.agent.headers` | `{}` | Extra headers sent to any provider. |
 | `xplain.editor.showCodeLens` | `true` | CodeLens above explained blocks. |

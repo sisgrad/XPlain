@@ -3,6 +3,7 @@ import * as http from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { HttpAgentProvider } from '../src/agent/HttpAgentProvider';
 import type { AgentRequest } from '../src/agent/AgentProvider';
+import { formatIdleDuration } from '../src/agent/stream';
 
 const request: AgentRequest = { sessionId: 's1', question: 'why?', items: [] };
 
@@ -133,5 +134,14 @@ describe('HttpAgentProvider', () => {
   it('aborts when the body goes idle after headers', async () => {
     mode = 'headers-ok-then-idle';
     await assert.rejects(provider({ timeoutMs: 120 }).explain(request, { signal: new AbortController().signal }), /went idle/);
+  });
+});
+
+describe('formatIdleDuration', () => {
+  it('prefers whole minutes', () => {
+    assert.equal(formatIdleDuration(600_000), '10 minutes');
+    assert.equal(formatIdleDuration(60_000), '1 minute');
+    assert.equal(formatIdleDuration(1500), '1500 ms');
+    assert.equal(formatIdleDuration(5000), '5 s');
   });
 });

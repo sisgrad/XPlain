@@ -192,8 +192,8 @@ export function ContextTab({ draft, templates, busy, agentLabel, pickMode, onCon
           </button>
         </div>
         {busy.busy ? (
-          <button class="button secondary" onClick={() => post({ type: 'cancel' })}>
-            <span class="codicon codicon-debug-stop" /> Cancel
+          <button class="button secondary" onClick={() => post({ type: 'cancel' })} title="Abort the request (also stops the agent)">
+            <span class="codicon codicon-debug-stop" /> Stop request
           </button>
         ) : (
           <button class="button primary" disabled={!canSend} onClick={() => post({ type: 'send' })} title="Send the context to the agent (Ctrl+Enter)">

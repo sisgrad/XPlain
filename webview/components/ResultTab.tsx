@@ -18,6 +18,11 @@ export function ResultTab({ result, stream, busy }: Props) {
           <h2 class="result-title">
             <span class="codicon codicon-loading codicon-modifier-spin" /> {stream.title}
           </h2>
+          <div class="result-actions">
+            <button class="button secondary small" onClick={() => post({ type: 'cancel' })} title="Abort the request (also stops the agent)">
+              <span class="codicon codicon-debug-stop" /> Stop
+            </button>
+          </div>
         </div>
         <StreamingBody text={stream.text} label={busy.label} />
       </div>
@@ -79,8 +84,8 @@ function StreamingBody({ text, label }: { text: string; label?: string }) {
     <div class="stream" ref={ref}>
       {text ? <article class="markdown-body" dangerouslySetInnerHTML={{ __html: html }} /> : <div class="hint">{label ?? 'Waiting for the agent…'}</div>}
       <div class="stream-footer">
-        <button class="button secondary small" onClick={() => post({ type: 'cancel' })}>
-          <span class="codicon codicon-debug-stop" /> Cancel
+        <button class="button secondary small" onClick={() => post({ type: 'cancel' })} title="Abort the request (also stops the agent)">
+          <span class="codicon codicon-debug-stop" /> Stop request
         </button>
       </div>
     </div>

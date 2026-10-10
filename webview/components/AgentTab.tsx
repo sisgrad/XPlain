@@ -307,8 +307,16 @@ export function AgentTab({ settings, test, testing, onTestStart, models: modelsR
           <summary>
             <span class="codicon codicon-settings" /> Advanced
           </summary>
-          <Field label="Idle timeout, ms (resets on every chunk / keepalive)">
-            <input class="input" type="number" min={1000} step={1000} value={form.timeoutMs} onInput={(e) => update({ timeoutMs: Number(val(e)) || 600000 })} />
+          <Field label="Idle timeout, minutes (resets on every chunk / keepalive)">
+            <input
+              class="input"
+              type="number"
+              min={1}
+              max={180}
+              step={1}
+              value={form.timeoutMinutes}
+              onInput={(e) => update({ timeoutMinutes: Math.max(1, Math.min(180, Number(val(e)) || 10)) })}
+            />
           </Field>
           <label class="check">
             <input type="checkbox" checked={form.streaming} onChange={(e) => update({ streaming: (e.target as HTMLInputElement).checked })} /> Stream partial output
@@ -391,7 +399,7 @@ function stripView(v: AgentSettingsView): AgentSettings {
   return {
     provider: v.provider,
     endpoint: v.endpoint,
-    timeoutMs: v.timeoutMs,
+    timeoutMinutes: v.timeoutMinutes,
     streaming: v.streaming,
     headers: { ...v.headers },
     systemPrompt: v.systemPrompt,

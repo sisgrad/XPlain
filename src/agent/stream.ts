@@ -96,10 +96,11 @@ export async function fetchWithTimeout(opts: FetchOptions): Promise<TimedRespons
     if (err instanceof AgentError) return err;
     if (opts.signal.aborted) return new AgentError('Cancelled.');
     if (controller.signal.aborted) {
+      const idle = formatIdleDuration(opts.timeoutMs);
       return new AgentError(
         phase === 'headers'
-          ? `Agent did not respond within ${opts.timeoutMs} ms.`
-          : `Agent went idle for ${opts.timeoutMs} ms (no data). The request was aborted — if the agent was still working (e.g. Hermes tools / GPU), increase xplain.agent.timeoutMs. Idle timeout resets on every received chunk, including keepalives.`,
+          ? `Agent did not respond within ${idle}.`
+          : `Agent went idle for ${idle} (no data). The request was aborted — if the agent was still working (e.g. Hermes tools / GPU), increase xplain.agent.timeoutMinutes. Idle timeout resets on every received chunk, including keepalives.`,
       );
     }
     return new AgentError(`Cannot reach agent at ${opts.url}: ${(err as Error).message}`);
@@ -164,4 +165,14 @@ export function withActivityBump(res: Response, onActivity: () => void): Respons
 
 export function joinUrl(base: string, path: string): string {
   return `${base.replace(/\/+$/, '')}/${path.replace(/^\/+/, '')}`;
+}
+
+/** Human-readable idle duration for errors (prefers whole minutes). */
+export function formatIdleDuration(timeoutMs: number): string {
+  if (timeoutMs >= 60_000 && timeoutMs % 60_000 === 0) {
+    const m = timeoutMs / 60_000;
+    return `${m} minute${m === 1 ? '' : 's'}`;
+  }
+  if (timeoutMs >= 1000 && timeoutMs % 1000 === 0) return `${timeoutMs / 1000} s`;
+  return `${timeoutMs} ms`;
 }

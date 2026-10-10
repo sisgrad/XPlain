@@ -94,6 +94,12 @@
         "category": "XPlain"
       },
       {
+        "command": "xplain.cancelRequest",
+        "title": "Stop Agent Request",
+        "category": "XPlain",
+        "icon": "$(debug-stop)"
+      },
+      {
         "command": "xplain.configureAgent",
         "title": "Configure Agent (Provider, Model, API Key)",
         "category": "XPlain",
@@ -128,6 +134,11 @@
     ],
     "menus": {
       "view/title": [
+        {
+          "command": "xplain.cancelRequest",
+          "when": "view == xplain.panel && xplain.busy",
+          "group": "navigation@0"
+        },
         {
           "command": "xplain.togglePickMode",
           "when": "view == xplain.panel",
@@ -267,11 +278,12 @@
           "minimum": 256,
           "description": "[anthropic] max_tokens for the answer."
         },
-        "xplain.agent.timeoutMs": {
+        "xplain.agent.timeoutMinutes": {
           "type": "number",
-          "default": 600000,
-          "minimum": 1000,
-          "description": "Idle timeout in milliseconds (default 10 min). Time allowed with no activity: waiting for response headers, then silence between body chunks. Any received data (SSE keepalives, tool-progress events, content) resets the timer. Aborting cancels the agent-side request."
+          "default": 10,
+          "minimum": 1,
+          "maximum": 180,
+          "description": "Idle timeout in minutes (default 10). Time allowed with no activity: waiting for response headers, then silence between body chunks. Any received data (SSE keepalives, tool-progress events, content) resets the timer. Aborting cancels the agent-side request."
         },
         "xplain.agent.streaming": {
           "type": "boolean",

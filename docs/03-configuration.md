@@ -19,7 +19,7 @@
 | `xplain.agent.anthropic.model` | string | `claude-sonnet-5` | [anthropic] Id модели Claude |
 | `xplain.agent.anthropic.maxTokens` | number ≥ 256 | `8192` | [anthropic] `max_tokens` ответа |
 | `xplain.agent.systemPrompt` | string (многострочная) | `""` | [hermes/openai/anthropic] Свой системный промпт; пусто — встроенный промпт XPlain |
-| `xplain.agent.timeoutMs` | number ≥ 1000 | `600000` | Idle-таймаут (мс): ожидание заголовков, затем тишина между чанками тела. Любые байты (keepalive, tool-progress, delta) сбрасывают таймер. Abort отменяет запрос и на стороне агента |
+| `xplain.agent.timeoutMinutes` | number 1…180 | `10` | Idle-таймаут в **минутах**: ожидание заголовков, затем тишина между чанками тела. Любые байты (keepalive, tool-progress, delta) сбрасывают таймер. Прежнее `timeoutMs` при чтении мигрирует (округление вверх до минут) |
 | `xplain.agent.streaming` | boolean | `true` | Показывать ответ по мере поступления (NDJSON для `xplain`, SSE для остальных) |
 | `xplain.agent.headers` | object (string → string) | `{}` | Дополнительные HTTP-заголовки для любого провайдера. Ключи API сюда не кладите — см. «Секреты» |
 
@@ -45,7 +45,7 @@
   "xplain.agent.provider": "hermes",
   "xplain.agent.hermes.baseUrl": "http://127.0.0.1:8642/v1",
   "xplain.agent.hermes.model": "hermes-agent",
-  "xplain.agent.timeoutMs": 600000,
+  "xplain.agent.timeoutMinutes": 15,
   "xplain.agent.headers": { "X-Team": "kernels" },
   "xplain.ui.background.opacity": 0.1,
   "xplain.ui.background.fit": "contain"
@@ -76,6 +76,7 @@ XPlain) или `x-api-key` (Anthropic). Ключ, сохранённый в ве
 | Toggle Pick Mode | `xplain.togglePickMode` | Включить/выключить режим выбора результата для добавления в контекст. Кнопка-мишень в заголовке панели |
 | Open XPlain Panel | `xplain.focus` | Открыть панель |
 | Clear Context | `xplain.clearContext` | Очистить контекст |
+| Stop Agent Request | `xplain.cancelRequest` | Прервать текущий запрос к агенту. Иконка в заголовке панели (когда `xplain.busy`), баннер **Stop**, Cancel в прогрессе окна |
 | Configure Agent (Provider, Model, API Key) | `xplain.configureAgent` | Открыть вкладку **Agent** панели. Есть в меню «…» заголовка панели |
 | Set Agent API Key / Clear Agent API Key | `xplain.setAgentApiKey` / `xplain.clearAgentApiKey` | Управление ключом выбранного провайдера |
 | Choose Background Image… | `xplain.chooseBackground` | Выбрать фон панели |
@@ -110,3 +111,4 @@ XPlain) или `x-api-key` (Anthropic). Ключ, сохранённый в ве
 | Ключ | Значение |
 | --- | --- |
 | `xplain.pickMode` | `true`, пока включён pick mode (можно использовать в своих keybindings/menus) |
+| `xplain.busy` | `true`, пока идёт запрос к агенту (показывает кнопку Stop в заголовке панели) |
