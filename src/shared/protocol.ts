@@ -3,6 +3,7 @@
  * `HostMessage` flows host -> webview, `ViewMessage` flows webview -> host.
  */
 import type {
+  AgentModelsResult,
   AgentProviderId,
   AgentSettings,
   AgentSettingsView,
@@ -57,6 +58,7 @@ export type HostMessage =
   | { type: 'tab'; tab: PanelTab }
   | { type: 'agentSettings'; settings: AgentSettingsView }
   | { type: 'agentTest'; result: AgentTestResult }
+  | { type: 'agentModels'; result: AgentModelsResult }
   | { type: 'notice'; level: 'info' | 'warn' | 'error'; message: string };
 
 export type ViewMessage =
@@ -94,6 +96,7 @@ export type ViewMessage =
   | { type: 'setAgentKey'; provider: AgentProviderId; key: string }
   | { type: 'clearAgentKey'; provider: AgentProviderId }
   | { type: 'testAgent'; settings: AgentSettings }
+  | { type: 'listModels'; settings: AgentSettings; requestId: number }
   | { type: 'openExternal'; url: string }
   | { type: 'log'; message: string };
 

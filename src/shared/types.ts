@@ -184,3 +184,13 @@ export interface AgentTestResult {
   message: string;
   models?: string[];
 }
+
+/** Answer to `listModels`: the models the provider's server advertises. */
+export interface AgentModelsResult {
+  requestId: number;
+  provider: AgentProviderId;
+  baseUrl: string;
+  models: string[];
+  /** Set when the list could not be fetched (server down, bad key, no discovery endpoint). */
+  error?: string;
+}

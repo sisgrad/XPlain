@@ -1,6 +1,6 @@
 import type { ComponentChildren } from 'preact';
 import { useEffect, useMemo, useState } from 'preact/hooks';
-import type { AgentProviderId, AgentSettings, AgentSettingsView, AgentTestResult, SettingsTarget } from '@shared/types';
+import type { AgentModelsResult, AgentProviderId, AgentSettings, AgentSettingsView, AgentTestResult, SettingsTarget } from '@shared/types';
 import { post } from '../vscode';
 
 interface Props {
@@ -8,7 +8,13 @@ interface Props {
   test: AgentTestResult | null;
   testing: boolean;
   onTestStart: () => void;
+  models: AgentModelsResult | null;
 }
+
+type ChatProviderId = 'hermes' | 'openai' | 'anthropic';
+const isChat = (p: AgentProviderId): p is ChatProviderId => p === 'hermes' || p === 'openai' || p === 'anthropic';
+
+let modelsRequestSeq = 0;
 
 interface ProviderInfo {
   label: string;
@@ -53,13 +59,15 @@ const PROVIDERS: Record<AgentProviderId, ProviderInfo> = {
 
 const ORDER: AgentProviderId[] = ['hermes', 'anthropic', 'openai', 'xplain', 'mock'];
 
-export function AgentTab({ settings, test, testing, onTestStart }: Props) {
+export function AgentTab({ settings, test, testing, onTestStart, models: modelsResult }: Props) {
   const [form, setForm] = useState<AgentSettings | null>(null);
   const [target, setTarget] = useState<SettingsTarget>('global');
   const [dirty, setDirty] = useState(false);
   const [key, setKey] = useState('');
   const [headersText, setHeadersText] = useState('');
   const [headersError, setHeadersError] = useState<string | null>(null);
+  const [pendingModels, setPendingModels] = useState<number | null>(null);
+  const [manualModel, setManualModel] = useState(false);
 
   // Adopt host settings whenever they change and the form has no unsaved edits.
   useEffect(() => {
@@ -75,7 +83,31 @@ export function AgentTab({ settings, test, testing, onTestStart }: Props) {
   const provider = form?.provider ?? 'xplain';
   const info = PROVIDERS[provider];
   const hasKey = settings?.hasKey[provider] ?? false;
-  const models = useMemo(() => (test && test.provider === provider && test.ok ? test.models ?? [] : []), [test, provider]);
+  const chatBaseUrl = form && isChat(provider) ? form[provider].baseUrl.trim() : '';
+  const hasKeyForProvider = settings?.hasKey[provider] ?? false;
+
+  // Load the model list from the server whenever the provider, its base URL or the stored key changes.
+  const requestModels = (settingsForRequest: AgentSettings) => {
+    const requestId = ++modelsRequestSeq;
+    setPendingModels(requestId);
+    post({ type: 'listModels', settings: settingsForRequest, requestId });
+  };
+  useEffect(() => {
+    if (!form || !isChat(provider)) return;
+    if (!chatBaseUrl) return;
+    const t = window.setTimeout(() => requestModels(form), 400); // debounce typing in Base URL
+    return () => window.clearTimeout(t);
+  }, [provider, chatBaseUrl, hasKeyForProvider, form !== null]);
+  useEffect(() => {
+    if (modelsResult && modelsResult.requestId === pendingModels) setPendingModels(null);
+  }, [modelsResult]);
+  useEffect(() => setManualModel(false), [provider]);
+
+  // Only trust a list that matches what the form currently points at.
+  const listCurrent = Boolean(modelsResult && modelsResult.provider === provider && modelsResult.baseUrl === chatBaseUrl);
+  const models = useMemo(() => (listCurrent ? modelsResult!.models : []), [listCurrent, modelsResult]);
+  const modelsError = listCurrent ? modelsResult!.error : undefined;
+  const loadingModels = pendingModels !== null;
 
   if (!form) {
     return (
@@ -127,14 +159,13 @@ export function AgentTab({ settings, test, testing, onTestStart }: Props) {
     if (!headers) return;
     onTestStart();
     post({ type: 'testAgent', settings: { ...form, headers } });
+    if (isChat(provider) && chatBaseUrl) requestModels({ ...form, headers });
   };
 
   const saveKey = () => {
     post({ type: 'setAgentKey', provider, key });
     setKey('');
   };
-
-  const currentModel = provider === 'hermes' || provider === 'openai' || provider === 'anthropic' ? form[provider].model : '';
 
   return (
     <div class="agent-tab">
@@ -171,22 +202,57 @@ export function AgentTab({ settings, test, testing, onTestStart }: Props) {
               onInput={(e) => updateChat(provider, { baseUrl: val(e) })}
             />
           </Field>
-          <Field label="Model">
-            <input
-              class="input"
-              type="text"
-              list="xplain-models"
-              value={form[provider].model}
-              placeholder={provider === 'hermes' ? 'hermes-agent' : provider === 'anthropic' ? 'claude-sonnet-5' : 'chat-latest'}
-              onInput={(e) => updateChat(provider, { model: val(e) })}
-            />
-            {models.length > 0 && (
-              <datalist id="xplain-models">
-                {models.map((m) => (
-                  <option value={m} key={m} />
-                ))}
-              </datalist>
+          <Field label={provider === 'hermes' ? 'Model / profile (from the harness)' : 'Model (from the server)'}>
+            <div class="row">
+              {manualModel || (models.length === 0 && !loadingModels) ? (
+                <input
+                  class="input"
+                  type="text"
+                  value={form[provider].model}
+                  placeholder={provider === 'hermes' ? 'hermes-agent' : provider === 'anthropic' ? 'claude-sonnet-5' : 'chat-latest'}
+                  onInput={(e) => updateChat(provider, { model: val(e) })}
+                />
+              ) : (
+                <select
+                  class="select"
+                  value={form[provider].model}
+                  disabled={loadingModels && models.length === 0}
+                  onChange={(e) => updateChat(provider, { model: (e.target as HTMLSelectElement).value })}
+                >
+                  {!form[provider].model && <option value="">— select a model —</option>}
+                  {form[provider].model && !models.includes(form[provider].model) && (
+                    <option value={form[provider].model}>{form[provider].model} (not in the server list)</option>
+                  )}
+                  {models.map((m) => (
+                    <option value={m} key={m}>
+                      {m}
+                    </option>
+                  ))}
+                </select>
+              )}
+              <button
+                class="icon-button"
+                title="Reload the model list from the server"
+                disabled={loadingModels || !chatBaseUrl}
+                onClick={() => requestModels(form)}
+              >
+                <span class={`codicon ${loadingModels ? 'codicon-loading codicon-modifier-spin' : 'codicon-refresh'}`} />
+              </button>
+              {models.length > 0 && (
+                <button class="icon-button" title={manualModel ? 'Choose from the list' : 'Type a model id manually'} onClick={() => setManualModel((v) => !v)}>
+                  <span class={`codicon ${manualModel ? 'codicon-list-flat' : 'codicon-edit'}`} />
+                </button>
+              )}
+            </div>
+            {loadingModels && models.length === 0 && <p class="small muted">Loading models from {chatBaseUrl}…</p>}
+            {!loadingModels && modelsError && (
+              <p class="small error">
+                Could not load models: {modelsError}
+                {provider !== 'openai' && !hasKey ? ' Save the API key first.' : ''} You can type the id manually.
+              </p>
             )}
+            {!loadingModels && !modelsError && listCurrent && models.length === 0 && <p class="small muted">The server returned no models.</p>}
+            {!loadingModels && models.length > 0 && <p class="small muted">{models.length} model(s) available at {chatBaseUrl}.</p>}
           </Field>
           {provider === 'anthropic' && (
             <Field label="max_tokens">
@@ -302,21 +368,6 @@ export function AgentTab({ settings, test, testing, onTestStart }: Props) {
           <p>
             <span class={`codicon ${test.ok ? 'codicon-pass' : 'codicon-error'}`} /> {test.message}
           </p>
-          {models.length > 0 && (
-            <div class="models">
-              {models.slice(0, 60).map((m) => (
-                <button
-                  key={m}
-                  class={`chip clickable ${m === currentModel ? 'current' : ''}`}
-                  title="Use this model"
-                  onClick={() => provider !== 'xplain' && provider !== 'mock' && updateChat(provider, { model: m })}
-                >
-                  {m}
-                </button>
-              ))}
-              {models.length > 60 && <span class="small muted">… and {models.length - 60} more</span>}
-            </div>
-          )}
         </section>
       )}
     </div>

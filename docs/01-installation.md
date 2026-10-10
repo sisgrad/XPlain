@@ -74,9 +74,9 @@ npm run install:ide                     # то же, что scripts/install.sh
 1. Иконка XPlain появляется в activity bar (левая вертикальная панель). Клик открывает панель.
 2. При первом открытии папки расширение создаёт `.xplain/` в корне первого workspace-фолдера.
 3. Откройте вкладку **Agent** в панели и выберите, кто будет отвечать:
-   - **Hermes Agent** — укажите Base URL API-сервера Hermes (`http://127.0.0.1:8642/v1`), модель/профиль и
-     ключ `API_SERVER_KEY`;
-   - **Anthropic (Claude)** или **OpenAI / Codex** — модель и ключ API;
+   - **Hermes Agent** — укажите Base URL API-сервера Hermes (`http://127.0.0.1:8642/v1`), сохраните ключ
+     `API_SERVER_KEY` и выберите модель/профиль из списка, который подгрузится с harness'а;
+   - **Anthropic (Claude)** или **OpenAI / Codex** — сохраните ключ API и выберите модель из списка;
    - **XPlain HTTP agent** — endpoint своего сервиса (по умолчанию `http://127.0.0.1:8765/explain`;
      референсный сервер: `python3 examples/agent_server.py`);
    - **Mock (offline)** — для проверки интерфейса без бэкенда.

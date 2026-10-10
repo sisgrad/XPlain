@@ -43,7 +43,7 @@ flowchart LR
 | `editor/decorations.ts` | Gutter-иконка, подсветка, hover с command-ссылками; подсветка блоков текущего контекста |
 | `editor/pickMode.ts` | Флаг pick mode, status bar item, контекстный ключ `xplain.pickMode`, автовыключение |
 | `agent/AgentProvider.ts` | Интерфейс `AgentProvider`, типы `AgentRequest/AgentItem/AgentResponse`, `AgentError` |
-| `agent/AgentRegistry.ts` | Чтение/запись `xplain.agent.*` (`read/view/save`, цель global/workspace, дефолты не записываются), ключи в `SecretStorage` по провайдеру, фабрика провайдера, подпись для футера, `test()` (список моделей / ping) |
+| `agent/AgentRegistry.ts` | Чтение/запись `xplain.agent.*` (`read/view/save`, цель global/workspace, дефолты не записываются), ключи в `SecretStorage` по провайдеру, фабрика провайдера, подпись для футера, `listModels()` (`GET /models` для чат-провайдеров), `test()` (список моделей / ping) |
 | `agent/stream.ts` | Общие примитивы: `fetchWithTimeout` (таймаут и abort на заголовки и тело), `readLines` (NDJSON), `readSse` (SSE: `event:`/`data:`, многострочные data, комментарии), `joinUrl` |
 | `agent/prompt.ts` | `buildChatPrompt`: контекст → `{system, user}` для чат-моделей (шаблон → результаты → код в fenced-блоках с диапазонами → вопрос), `DEFAULT_SYSTEM_PROMPT`, `detectHtml` |
 | `agent/HttpAgentProvider.ts` | Провайдер `xplain`: `fetch` к endpoint, JSON / NDJSON / SSE по контракту XPlain |
@@ -73,7 +73,7 @@ webview/
     ResultTab.tsx     рендер Markdown / iframe для HTML / потоковый вывод / переименование
     TemplatesTab.tsx  редактор шаблона (имя, инструкция, файлы, drop-zone), список шаблонов
     HistoryTab.tsx    список сессий с фильтром
-    AgentTab.tsx      форма провайдера: выбор, поля, ключ API, Advanced, Save (global/workspace), Test connection
+    AgentTab.tsx      форма провайдера: выбор, поля, выпадающий список моделей (автозагрузка с сервера, ручной ввод как запасной вариант), ключ API, Advanced, Save (global/workspace), Test connection
   styles.css          стили на CSS-переменных темы VS Code
 ```
 
@@ -86,14 +86,14 @@ webview/
 
 **Host → Webview (`HostMessage`)**: `init` (полное состояние), `draft`, `sessions`, `templates`, `pickMode`,
 `busy`, `background`, `agentLabel`, `agentSettings` (`AgentSettingsView`: настройки + `hasKey` по провайдерам +
-`target`), `agentTest`, `showResult`, `streamStart` / `streamDelta` / `streamEnd`, `templateFiles`,
+`target`), `agentTest`, `agentModels` (список моделей с `requestId`, `provider`, `baseUrl`, `error?`), `showResult`, `streamStart` / `streamDelta` / `streamEnd`, `templateFiles`,
 `editTemplate`, `tab`, `notice`.
 
 **Webview → Host (`ViewMessage`)**: `ready`, `setQuestion`, `setTemplate`, `removeItem`, `moveItem`,
 `clearDraft`, `send`, `cancel`, `openSession`, `openSessionInEditor`, `addSessionToDraft`, `deleteSession`,
 `renameSession`, `revealAnchor`, `togglePickMode`, `saveTemplate`, `deleteTemplate`, `loadTemplateForEdit`,
 `pickTemplateFiles`, `readUris`, `chooseBackground`, `clearBackground`, `dropBackground`, `openSettings`,
-`saveAgentSettings` (settings + target), `setAgentKey`, `clearAgentKey`, `testAgent`, `openExternal`, `log`.
+`saveAgentSettings` (settings + target), `setAgentKey`, `clearAgentKey`, `testAgent`, `listModels` (settings + requestId), `openExternal`, `log`.
 
 Принцип: источник истины — хост. Webview отправляет намерение, хост меняет состояние и рассылает
 обновление (`draft`, `sessions`, …). Исключение — локальный текст вопроса (debounce), черновик шаблона и

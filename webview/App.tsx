@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'preact/hooks';
 import type { HostMessage, InitState, PanelTab } from '@shared/protocol';
 import type {
+  AgentModelsResult,
   AgentSettingsView,
   AgentTestResult,
   BackgroundState,
@@ -54,6 +55,7 @@ export function App() {
   const [agentSettings, setAgentSettings] = useState<AgentSettingsView | null>(null);
   const [agentTest, setAgentTest] = useState<AgentTestResult | null>(null);
   const [agentTesting, setAgentTesting] = useState(false);
+  const [agentModels, setAgentModels] = useState<AgentModelsResult | null>(null);
   const [result, setResult] = useState<ResultView | null>(null);
   const [stream, setStream] = useState<StreamState | null>(null);
   const [notice, setNotice] = useState<Notice | null>(null);
@@ -127,6 +129,9 @@ export function App() {
         case 'agentTest':
           setAgentTest(m.result);
           setAgentTesting(false);
+          break;
+        case 'agentModels':
+          setAgentModels(m.result);
           break;
         case 'showResult':
           setStream(null);
@@ -289,7 +294,9 @@ export function App() {
           <TemplatesTab templates={templates} editor={editor} setEditor={setEditor} activeTemplateId={draft.templateId} />
         )}
         {tab === 'history' && <HistoryTab sessions={sessions} current={result?.session.id} />}
-        {tab === 'agent' && <AgentTab settings={agentSettings} test={agentTest} testing={agentTesting} onTestStart={() => setAgentTesting(true)} />}
+        {tab === 'agent' && (
+          <AgentTab settings={agentSettings} test={agentTest} testing={agentTesting} onTestStart={() => setAgentTesting(true)} models={agentModels} />
+        )}
       </main>
 
       {dragOver && (

@@ -100,7 +100,7 @@ media/                иконки
 8. Фон: выбор файла, drop картинки, настройки opacity/blur/fit, очистка.
 9. HTML-результат (сервер с `format: html`) → iframe в панели, Open in editor.
 10. Вкладка Agent: смена провайдера показывает его поля; Save key → индикатор `saved`, ключа нет в
-    `settings.json`; Test connection против Hermes/Ollama показывает модели, клик по чипу подставляет модель;
+    `settings.json`; выпадающий список Model заполняется с Hermes/Ollama сам (и после Save key), ↻ перезагружает, ✎ — ручной ввод;
     Save в workspace → `.vscode/settings.json`, футер Context обновился; Send через выбранного провайдера.
 
 ## Соглашения

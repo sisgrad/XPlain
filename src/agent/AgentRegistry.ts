@@ -5,6 +5,7 @@
 import * as vscode from 'vscode';
 import {
   AGENT_PROVIDER_IDS,
+  type AgentModelsResult,
   type AgentProviderId,
   type AgentSettings,
   type AgentSettingsView,
@@ -208,32 +209,52 @@ export class AgentRegistry {
     }
   }
 
+  /* --------------------------------------------------------------- models */
+
+  /** Ask the provider's server which models it offers (hermes/openai/anthropic only). */
+  async listModels(settings: AgentSettings, requestId = 0): Promise<AgentModelsResult> {
+    const provider = settings.provider;
+    const timeoutMs = Math.min(settings.timeoutMs, 15_000);
+    const signal = AbortSignal.timeout(timeoutMs);
+    const base = { requestId, provider, models: [] as string[] };
+    if (provider !== 'hermes' && provider !== 'openai' && provider !== 'anthropic') {
+      return { ...base, baseUrl: '', error: 'This provider has no model list.' };
+    }
+    const baseUrl = settings[provider].baseUrl.trim();
+    if (!baseUrl) return { ...base, baseUrl, error: 'Base URL is empty.' };
+    try {
+      const cfg = { baseUrl, apiKey: await this.getKey(provider), headers: settings.headers, timeoutMs };
+      const models = provider === 'anthropic' ? await listAnthropicModels(cfg, signal) : await listOpenAIModels(cfg, signal);
+      return { ...base, baseUrl, models };
+    } catch (err) {
+      return { ...base, baseUrl, error: err instanceof Error ? err.message : String(err) };
+    }
+  }
+
   /* ----------------------------------------------------------------- test */
 
   async test(settings: AgentSettings): Promise<AgentTestResult> {
-    const signal = AbortSignal.timeout(Math.min(settings.timeoutMs, 20_000));
     const timeoutMs = Math.min(settings.timeoutMs, 20_000);
+    const signal = AbortSignal.timeout(timeoutMs);
     const provider = settings.provider;
     try {
       switch (provider) {
         case 'mock':
           return { provider, ok: true, message: 'Mock provider is always available.' };
         case 'hermes':
-        case 'openai': {
-          const s = settings[provider];
-          const models = await listOpenAIModels({ baseUrl: s.baseUrl, apiKey: await this.getKey(provider), headers: settings.headers, timeoutMs }, signal);
-          const has = models.includes(s.model);
-          return {
-            provider,
-            ok: true,
-            models,
-            message: `Connected to ${s.baseUrl}: ${models.length} model(s)${s.model ? has ? `, "${s.model}" is available.` : `; note: "${s.model}" is not in the list (may still work).` : '.'}`,
-          };
-        }
+        case 'openai':
         case 'anthropic': {
-          const s = settings.anthropic;
-          const models = await listAnthropicModels({ baseUrl: s.baseUrl, apiKey: await this.getKey('anthropic'), headers: settings.headers, timeoutMs }, signal);
-          return { provider, ok: true, models, message: `Connected to ${s.baseUrl}: ${models.length} model(s).` };
+          const s = settings[provider];
+          const list = await this.listModels(settings);
+          if (list.error) throw new AgentError(list.error);
+          const models = list.models;
+          const has = models.includes(s.model);
+          const note = !s.model
+            ? ' Pick a model from the list.'
+            : has
+              ? ` "${s.model}" is available.`
+              : ` Note: "${s.model}" is not in the list (may still work).`;
+          return { provider, ok: true, models, message: `Connected to ${s.baseUrl}: ${models.length} model(s).${note}` };
         }
         case 'xplain':
         default: {

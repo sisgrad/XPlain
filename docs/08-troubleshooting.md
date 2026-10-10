@@ -43,7 +43,7 @@ Quick Open. Кликните в панель XPlain или Explorer и нажм�
 | `HTTP 401/403` / `Invalid API key` / `authentication_error` | Ключ не задан или неверный: Agent → API key → Save key. Для Hermes ключ = `API_SERVER_KEY`. Проверьте, что ключ сохранён именно для выбранного провайдера (индикатор `saved`) |
 | `HTTP 404` у Hermes/OpenAI | Base URL должен заканчиваться на `/v1` (XPlain добавляет `/chat/completions` и `/models`). У Anthropic — наоборот, без `/v1` |
 | `HTTP 4xx/5xx: …` | Смотрите тело ответа в сообщении и логи своего сервиса / Output → XPlain |
-| `… response has no message content` / `empty answer` | Модель вернула пустой ответ; проверьте модель (Test connection покажет доступные) и системный промпт |
+| `… response has no message content` / `empty answer` | Модель вернула пустой ответ; выберите другую модель из списка и проверьте системный промпт |
 | `Agent response has no "content" field` | [xplain] Ответ должен содержать `content` (или `answer`/`markdown`/`html`) — см. [04-agent-api.md](04-agent-api.md) |
 | `Agent stream finished without any content` | [xplain] В NDJSON-потоке не было `delta` и `done.content` |
 
@@ -64,6 +64,12 @@ curl -sS -H 'Authorization: Bearer <API_SERVER_KEY>' http://127.0.0.1:8642/v1/mo
 
 ## Вкладка Agent
 
+- **Список моделей пуст / «Could not load models»** — сервер недоступен по указанному Base URL с машины
+  extension host, либо не сохранён ключ (Hermes отвечает 401 без `API_SERVER_KEY`; Anthropic требует ключ
+  всегда). Сохраните ключ (список перезапросится сам) или нажмите ↻. Пока список не загружен, модель можно
+  ввести вручную (кнопка ✎ / текстовое поле).
+- **В списке нет нужной модели** — нажмите ✎ и введите id вручную; сохранённая модель, которой нет в
+  списке, показывается с пометкой «not in the server list» и продолжает использоваться.
 - **Кнопка Save неактивна** — нет изменений относительно сохранённых настроек.
 - **Форма «откатилась»** — настройки изменились снаружи (`settings.json`, другой инстанс) при отсутствии
   несохранённых правок; это ожидаемо.

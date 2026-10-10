@@ -94,14 +94,16 @@ press **Test connection** and then **Save** (to your user settings or to this wo
 
 | Provider | What it talks to | Fields |
 | --- | --- | --- |
-| **Hermes Agent** | Hermes harness API server (OpenAI-compatible). Enable it in Hermes with `API_SERVER_ENABLED=true`, `API_SERVER_KEY=...`, run `hermes api-server`. | Base URL (`http://127.0.0.1:8642/v1`), model (`hermes-agent` or a profile name), key = `API_SERVER_KEY`. Tool-progress events are ignored, the final answer is streamed. |
-| **Anthropic (Claude)** | Anthropic Messages API. | Base URL, model id (e.g. `claude-sonnet-5`), `max_tokens`, API key (`x-api-key`). |
-| **OpenAI / Codex** | OpenAI Chat Completions, or any compatible server (Ollama, vLLM, LiteLLM, OpenRouter). | Base URL (`https://api.openai.com/v1`), model id, API key (Bearer). |
+| **Hermes Agent** | Hermes harness API server (OpenAI-compatible). Enable it in Hermes with `API_SERVER_ENABLED=true`, `API_SERVER_KEY=...`, run `hermes api-server`. | Base URL (`http://127.0.0.1:8642/v1`), model/profile picked from the list the harness reports, key = `API_SERVER_KEY`. Tool-progress events are ignored, the final answer is streamed. |
+| **Anthropic (Claude)** | Anthropic Messages API. | Base URL, model picked from the server list, `max_tokens`, API key (`x-api-key`). |
+| **OpenAI / Codex** | OpenAI Chat Completions, or any compatible server (Ollama, vLLM, LiteLLM, OpenRouter). | Base URL (`https://api.openai.com/v1`), model picked from the server list, API key (Bearer). |
 | **XPlain HTTP agent** | Your own service speaking the contract below. | Endpoint URL, optional Bearer key. |
 | **Mock (offline)** | Built-in canned answer. | - |
 
-**Test connection** lists the models the server offers (Hermes/OpenAI/Anthropic); click a model
-chip to put it into the *Model* field. For chat providers the context is rendered into one user
+The **Model** dropdown is filled from the server's `/models` endpoint automatically (when the tab
+opens, when the provider, base URL or key changes, or via the refresh button); if the list cannot be
+fetched you can type the id manually. **Test connection** verifies the same endpoint and reports
+whether the chosen model is offered. For chat providers the context is rendered into one user
 message (templates, previous results, fenced code blocks with `L` ranges, question) preceded by a
 system prompt that asks for a Markdown answer starting with a short `#` title; override it under
 *Advanced -> System prompt*.

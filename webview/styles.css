@@ -329,24 +329,6 @@ code {
   color: #fff;
 }
 
-.chip.clickable {
-  margin: 0;
-  padding: 2px 7px;
-  font-size: 11px;
-  border: 1px solid transparent;
-  cursor: pointer;
-  font-family: inherit;
-}
-
-.chip.clickable:hover {
-  border-color: var(--vscode-focusBorder);
-}
-
-.chip.clickable.current {
-  background: var(--vscode-button-background);
-  color: var(--vscode-button-foreground);
-}
-
 /* -------------------------------------------------------------- agent tab */
 .agent-tab {
   display: flex;
@@ -427,12 +409,10 @@ details.advanced > summary .codicon {
   margin-right: 4px;
 }
 
-.models {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
-  max-height: 160px;
-  overflow: auto;
+.field .row .select,
+.field .row .input {
+  flex: 1 1 auto;
+  min-width: 0;
 }
 
 /* --------------------------------------------------------------- controls */

@@ -597,6 +597,12 @@ export class XplainController implements vscode.Disposable {
           this.d.view.post({ type: 'agentTest', result });
           break;
         }
+        case 'listModels': {
+          const result = await this.agents.listModels(m.settings, m.requestId);
+          if (result.error) this.d.output.appendLine(`[models] ${result.provider} @ ${result.baseUrl}: ${result.error}`);
+          this.d.view.post({ type: 'agentModels', result });
+          break;
+        }
         case 'openExternal':
           if (/^https?:\/\//i.test(m.url)) await vscode.env.openExternal(vscode.Uri.parse(m.url));
           break;
