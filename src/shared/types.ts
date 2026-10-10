@@ -115,10 +115,22 @@ export type DraftItem =
       title: string;
     };
 
+/** Language the agent should write the explanation in. */
+export type ExplainLanguage = 'en' | 'ru';
+
+export const EXPLAIN_LANGUAGES: Array<{ id: ExplainLanguage; label: string }> = [
+  { id: 'en', label: 'English' },
+  { id: 'ru', label: 'Russian' },
+];
+
 export interface DraftState {
   items: DraftItem[];
   question: string;
   templateId: string | null;
+  /** Language for the agent's answer. */
+  explainLanguage: ExplainLanguage;
+  /** Ask the agent to use the bundled Excalidraw Diagram skill. */
+  useExcalidraw: boolean;
 }
 
 export type BackgroundFit = 'cover' | 'contain' | 'tile';
@@ -138,7 +150,13 @@ export interface BusyState {
   sessionId?: string;
 }
 
-export const DEFAULT_DRAFT: DraftState = { items: [], question: '', templateId: null };
+export const DEFAULT_DRAFT: DraftState = {
+  items: [],
+  question: '',
+  templateId: null,
+  explainLanguage: 'en',
+  useExcalidraw: false,
+};
 
 /* ------------------------------------------------------------ agent setup */
 

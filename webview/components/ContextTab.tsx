@@ -1,5 +1,7 @@
+import type { ComponentChildren } from 'preact';
 import { useEffect, useRef, useState } from 'preact/hooks';
-import type { BusyState, DraftState, TemplateMeta } from '@shared/types';
+import type { BusyState, DraftState, ExplainLanguage, TemplateMeta } from '@shared/types';
+import { EXPLAIN_LANGUAGES } from '@shared/types';
 import { post } from '../vscode';
 
 interface Props {
@@ -129,6 +131,46 @@ export function ContextTab({ draft, templates, busy, agentLabel, pickMode, onCon
         {template?.instruction && <div class="template-preview">{template.instruction}</div>}
       </section>
 
+      <section class="section">
+        <h2>
+          <span class="codicon codicon-settings" /> Options
+        </h2>
+        <Field label="Explanation language">
+          <select
+            class="select"
+            value={draft.explainLanguage}
+            onChange={(e) => post({ type: 'setExplainLanguage', language: (e.target as HTMLSelectElement).value as ExplainLanguage })}
+            title="Language the agent should write the explanation in"
+          >
+            {EXPLAIN_LANGUAGES.map((l) => (
+              <option value={l.id} key={l.id}>
+                {l.label}
+              </option>
+            ))}
+          </select>
+        </Field>
+        <label class="check options-check" title="Installs the Excalidraw Diagram skill into .claude/skills/ and asks the agent to use it">
+          <input
+            type="checkbox"
+            checked={draft.useExcalidraw}
+            onChange={(e) => post({ type: 'setUseExcalidraw', enabled: (e.target as HTMLInputElement).checked })}
+          />
+          <span>
+            Draw diagrams with the <strong>Excalidraw</strong> skill
+            <span class="muted"> · installs into .claude/skills/ if needed</span>
+          </span>
+        </label>
+        {draft.useExcalidraw && (
+          <p class="small muted">
+            On Send, XPlain copies{' '}
+            <a href="https://github.com/coleam00/excalidraw-diagram-skill" onClick={(e) => { e.preventDefault(); post({ type: 'openExternal', url: 'https://github.com/coleam00/excalidraw-diagram-skill' }); }}>
+              coleam00/excalidraw-diagram-skill
+            </a>{' '}
+            into the workspace and tells the agent to use it for diagrams.
+          </p>
+        )}
+      </section>
+
       <section class="section grow">
         <h2>
           <span class="codicon codicon-question" /> Your question <span class="muted">· optional</span>
@@ -169,4 +211,13 @@ export function basename(path: string): string {
 
 export function formatRange(start: number, end: number): string {
   return start === end ? `L${start}` : `L${start}-L${end}`;
+}
+
+function Field(props: { label: string; children: ComponentChildren }) {
+  return (
+    <label class="field">
+      <span class="field-label">{props.label}</span>
+      {props.children}
+    </label>
+  );
 }

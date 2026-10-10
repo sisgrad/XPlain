@@ -64,6 +64,19 @@ describe('ContextDraft', () => {
     const item = d.snapshot.items[0];
     assert.ok(item.kind === 'code' && item.startLine === 70 && item.endLine === 233);
   });
+
+  it('keeps explain language and Excalidraw flag across clear', () => {
+    const d = new ContextDraft();
+    assert.equal(d.snapshot.explainLanguage, 'en');
+    assert.equal(d.snapshot.useExcalidraw, false);
+    d.setExplainLanguage('ru');
+    d.setUseExcalidraw(true);
+    d.add(code);
+    d.clear();
+    assert.equal(d.snapshot.items.length, 0);
+    assert.equal(d.snapshot.explainLanguage, 'ru');
+    assert.equal(d.snapshot.useExcalidraw, true);
+  });
 });
 
 describe('protocol', () => {

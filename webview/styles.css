@@ -360,6 +360,26 @@ code {
   margin: 0;
 }
 
+.options-check {
+  align-items: flex-start;
+  margin-top: 4px;
+  line-height: 1.35;
+}
+
+.options-check input {
+  margin-top: 2px;
+}
+
+.context-tab a {
+  color: var(--vscode-textLink-foreground);
+  cursor: pointer;
+  text-decoration: none;
+}
+
+.context-tab a:hover {
+  text-decoration: underline;
+}
+
 details.advanced > summary {
   cursor: pointer;
   font-size: 12px;

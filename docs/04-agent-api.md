@@ -117,9 +117,19 @@ Authorization: Bearer <ключ>                       # если задан к�
   "sessionId": "mv2ngpzs-a1e0626c",   // id сессии в .xplain/sessions/<id>/
   "question": "Why does the MMA warp wait on this barrier?",  // может быть пустой строкой
   "workspace": "XPlain",              // имя папки проекта (опционально)
+  "explainLanguage": "en",            // "en" | "ru" — язык письменного ответа
+  "useExcalidraw": false,             // true → агент обязан использовать Excalidraw-скилл
+  "excalidrawSkillPath": ".claude/skills/excalidraw-diagram",  // только при useExcalidraw
   "items": [ /* в порядке, заданном пользователем */ ]
 }
 ```
+
+Поля `explainLanguage` / `useExcalidraw` / `excalidrawSkillPath` выставляются вкладкой Context.
+Для чат-провайдеров (Hermes / OpenAI / Anthropic) XPlain дополнительно вшивает секции `## Language` и
+(при включённых диаграммах) `## Diagrams` в user-сообщение; для контракта `xplain` сервис должен читать
+эти поля сам. Скилл лежит в репозитории расширения (`skills/excalidraw-diagram/`, upstream
+[coleam00/excalidraw-diagram-skill](https://github.com/coleam00/excalidraw-diagram-skill)) и перед
+отправкой копируется в workspace.
 
 #### Элементы `items`
 

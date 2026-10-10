@@ -3,6 +3,8 @@
  * plain chat models (Hermes, OpenAI, Anthropic). The XPlain HTTP contract
  * sends the structured request instead and does not use this.
  */
+import type { ExplainLanguage } from '../shared/types';
+import { excalidrawAgentInstructions } from '../skills/excalidrawInstructions';
 import type { AgentItem, AgentRequest } from './AgentProvider';
 
 export const DEFAULT_SYSTEM_PROMPT = `You are XPlain, an expert code explainer embedded in a code editor.
@@ -13,7 +15,8 @@ Rules:
 - Answer in well-structured Markdown: short sections, bullet points where useful, fenced code blocks with a language tag for code.
 - Refer to code by file and line numbers (e.g. "L192-L221") when it helps.
 - If a template instruction is present, follow it. Treat template files as reference material, not as code to explain unless asked.
-- Be precise and technical; do not pad the answer. If something cannot be determined from the given code, say so.`;
+- Be precise and technical; do not pad the answer. If something cannot be determined from the given code, say so.
+- Obey the Language and Diagrams instructions in the user message when present.`;
 
 export interface ChatPrompt {
   system: string;
@@ -25,6 +28,11 @@ export function buildChatPrompt(request: AgentRequest, systemPrompt?: string): C
   const codes = request.items.filter((i): i is Extract<AgentItem, { type: 'code' }> => i.type === 'code');
   const results = request.items.filter((i): i is Extract<AgentItem, { type: 'result' }> => i.type === 'result');
   const templates = request.items.filter((i): i is Extract<AgentItem, { type: 'template' }> => i.type === 'template');
+
+  parts.push(languageInstruction(request.explainLanguage));
+  if (request.useExcalidraw) {
+    parts.push(excalidrawAgentInstructions(request.excalidrawSkillPath));
+  }
 
   for (const t of templates) {
     parts.push(`## Template: ${t.name}`);
@@ -54,6 +62,22 @@ export function buildChatPrompt(request: AgentRequest, systemPrompt?: string): C
     system: (systemPrompt?.trim() || DEFAULT_SYSTEM_PROMPT).trim(),
     user: parts.join('\n\n'),
   };
+}
+
+export function languageInstruction(lang: ExplainLanguage | undefined): string {
+  if (lang === 'ru') {
+    return [
+      '## Language',
+      'Write the **entire** explanation in **Russian** (русский язык).',
+      'Keep code identifiers, keywords, file paths, and line references (e.g. `L12-L48`) in their original form; do not translate them.',
+      'The H1 title may be in Russian.',
+    ].join('\n');
+  }
+  return [
+    '## Language',
+    'Write the **entire** explanation in **English**.',
+    'Keep code identifiers, file paths, and line references unchanged.',
+  ].join('\n');
 }
 
 function fence(text: string, lang = ''): string {

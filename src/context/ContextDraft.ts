@@ -1,9 +1,10 @@
 /** The context the user is assembling before confirming the send. */
-import type { DraftItem, DraftState } from '../shared/types';
+import type { DraftItem, DraftState, ExplainLanguage } from '../shared/types';
+import { DEFAULT_DRAFT } from '../shared/types';
 import { Emitter } from '../util/emitter';
 
 export class ContextDraft {
-  private state: DraftState = { items: [], question: '', templateId: null };
+  private state: DraftState = { ...DEFAULT_DRAFT, items: [] };
   private readonly changeEmitter = new Emitter<DraftState>();
   readonly onDidChange = this.changeEmitter.event;
 
@@ -56,6 +57,18 @@ export class ContextDraft {
     this.fire();
   }
 
+  setExplainLanguage(lang: ExplainLanguage): void {
+    if (this.state.explainLanguage === lang) return;
+    this.state.explainLanguage = lang;
+    this.fire();
+  }
+
+  setUseExcalidraw(value: boolean): void {
+    if (this.state.useExcalidraw === value) return;
+    this.state.useExcalidraw = value;
+    this.fire();
+  }
+
   /** Update ranges of code items when anchors move. */
   updateCodeRanges(update: (anchorId: string) => { startLine: number; endLine: number } | undefined): void {
     let changed = false;
@@ -72,7 +85,14 @@ export class ContextDraft {
   }
 
   clear(options: { keepQuestion?: boolean } = {}): void {
-    this.state = { items: [], question: options.keepQuestion ? this.state.question : '', templateId: null };
+    // Keep language / diagram preferences across clears — they are UI choices, not context items.
+    this.state = {
+      items: [],
+      question: options.keepQuestion ? this.state.question : '',
+      templateId: null,
+      explainLanguage: this.state.explainLanguage,
+      useExcalidraw: this.state.useExcalidraw,
+    };
     this.fire();
   }
 

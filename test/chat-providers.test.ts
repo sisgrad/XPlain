@@ -22,14 +22,36 @@ describe('buildChatPrompt', () => {
   it('uses the default system prompt and lays out templates, results, code and question', () => {
     const p = buildChatPrompt(request);
     assert.equal(p.system, DEFAULT_SYSTEM_PROMPT.trim());
+    const lang = p.user.indexOf('## Language');
     const t = p.user.indexOf('Be strict.');
     const r = p.user.indexOf('Earlier answer');
     const c = p.user.indexOf('src/a.ts');
     const q = p.user.indexOf('What does this do?');
-    assert.ok(t >= 0 && r > t && c > r && q > c, p.user);
+    assert.ok(lang >= 0 && t > lang && r > t && c > r && q > c, p.user);
+    assert.match(p.user, /entire.*explanation in \*\*English\*\*/i);
     assert.match(p.user, /L3-L4/);
     assert.match(p.user, /```typescript/);
     assert.match(p.user, /rules\.md/);
+  });
+
+  it('asks for Russian when explainLanguage is ru', () => {
+    const p = buildChatPrompt({ ...request, explainLanguage: 'ru' });
+    assert.match(p.user, /Russian|русский/i);
+    assert.doesNotMatch(p.user, /entire.*explanation in \*\*English\*\*/i);
+  });
+
+  it('includes Excalidraw skill instructions when useExcalidraw is on', () => {
+    const p = buildChatPrompt({ ...request, useExcalidraw: true, excalidrawSkillPath: '.claude/skills/excalidraw-diagram' });
+    assert.match(p.user, /## Diagrams/);
+    assert.match(p.user, /Excalidraw Diagram/);
+    assert.match(p.user, /\.claude\/skills\/excalidraw-diagram/);
+    assert.match(p.user, /coleam00\/excalidraw-diagram-skill/);
+    assert.match(p.system, /Language and Diagrams/);
+  });
+
+  it('omits diagram instructions when useExcalidraw is off', () => {
+    const p = buildChatPrompt(request);
+    assert.doesNotMatch(p.user, /## Diagrams/);
   });
 
   it('honours a custom system prompt and escapes fences inside code', () => {

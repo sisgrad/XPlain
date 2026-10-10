@@ -1,4 +1,4 @@
-import type { ResultFormat } from '../shared/types';
+import type { ExplainLanguage, ResultFormat } from '../shared/types';
 
 /** Items exactly as they are sent to the agent service. */
 export type AgentItem =
@@ -29,6 +29,12 @@ export interface AgentRequest {
   items: AgentItem[];
   /** Workspace folder name, for the agent's information. */
   workspace?: string;
+  /** Preferred language for the written explanation. */
+  explainLanguage?: ExplainLanguage;
+  /** When true, the agent must use the Excalidraw Diagram skill. */
+  useExcalidraw?: boolean;
+  /** Workspace-relative path where XPlain installed the skill (when useExcalidraw). */
+  excalidrawSkillPath?: string;
 }
 
 export interface AgentResponse {

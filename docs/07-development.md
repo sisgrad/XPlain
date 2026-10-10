@@ -47,6 +47,7 @@ src/                  extension host (TypeScript, CommonJS-бандл)
   storage/            .xplain/, абстракция FS
   editor/             якоря, CodeLens, декорации, pick mode
   agent/              AgentRegistry, провайдеры (xplain/hermes/openai/anthropic/mock), prompt, stream, titles
+  skills/             bundled Excalidraw skill + install helpers
   panel/              WebviewView, фон
   context/            ContextDraft
   util/
@@ -79,7 +80,7 @@ media/                иконки
 | `test/anchors.test.ts` | нормализация/хеш, `toLineChange`, сдвиги диапазонов, поиск snippet, валидация хеша |
 | `test/store.test.ts` | создание `.xplain`, переиспользование якорей, сессии ↔ якоря, результаты md/html, reload, шаблоны, фон |
 | `test/http.test.ts` | Провайдер `xplain`: JSON-ответ, NDJSON-стрим с дельтами, `done.content`, не-JSON тело, HTTP-ошибки, таймаут, отмена |
-| `test/chat-providers.test.ts` | `hermesHints` (разбор `/api/status`, тексты подсказок, probe); `buildChatPrompt` (порядок секций, ограждения, свой system prompt), `joinUrl`, `detectHtml`; OpenAI/Hermes SSE (keepalive, `hermes.tool.progress`, `[DONE]`), JSON-ответ, ошибки API, `/models`; Anthropic SSE/JSON, заголовки, обязательный ключ, `/v1/models` |
+| `test/chat-providers.test.ts` | язык ответа / Excalidraw-инструкции в `buildChatPrompt`; `hermesHints` (разбор `/api/status`, тексты подсказок, probe); `buildChatPrompt` (порядок секций, ограждения, свой system prompt), `joinUrl`, `detectHtml`; OpenAI/Hermes SSE (keepalive, `hermes.tool.progress`, `[DONE]`), JSON-ответ, ошибки API, `/models`; Anthropic SSE/JSON, заголовки, обязательный ключ, `/v1/models` |
 | `test/misc.test.ts` | `deriveTitle`, `ContextDraft`, `isViewMessage` |
 
 `AgentRegistry` импортирует `vscode`, поэтому в mocha не тестируется; его можно проверить smoke-скриптом

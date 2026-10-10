@@ -23,7 +23,10 @@ architecture, development, troubleshooting) lives in the `docs/` folder of the r
 
 1. Select a block of code and press **Shift+X**. The block appears in the XPlain panel as
    `file.cu L61-L224`. Repeat for more blocks (sub-ranges are tracked separately).
-2. In the panel, optionally type a question and pick a template.
+2. In the panel, optionally type a question, pick a template, choose the explanation language
+   (English / Russian), and optionally enable **Draw diagrams with the Excalidraw skill**
+   ([coleam00/excalidraw-diagram-skill](https://github.com/coleam00/excalidraw-diagram-skill) —
+   XPlain installs it into `.claude/skills/` on send).
 3. Press **Send to agent** (or Ctrl+Enter in the question box). Nothing is sent until you confirm.
 4. The answer streams into the **Result** tab and is saved as `.xplain/sessions/<id>/result.md`
    (or `result.html` for self-contained HTML answers).

@@ -11,6 +11,7 @@ import type {
   BackgroundState,
   BusyState,
   DraftState,
+  ExplainLanguage,
   ResultFormat,
   SessionMeta,
   SettingsTarget,
@@ -65,6 +66,8 @@ export type ViewMessage =
   | { type: 'ready' }
   | { type: 'setQuestion'; text: string }
   | { type: 'setTemplate'; templateId: string | null }
+  | { type: 'setExplainLanguage'; language: ExplainLanguage }
+  | { type: 'setUseExcalidraw'; enabled: boolean }
   | { type: 'removeItem'; index: number }
   | { type: 'moveItem'; from: number; to: number }
   | { type: 'clearDraft' }

@@ -45,7 +45,9 @@ flowchart LR
 | `agent/AgentProvider.ts` | Интерфейс `AgentProvider`, типы `AgentRequest/AgentItem/AgentResponse`, `AgentError` |
 | `agent/AgentRegistry.ts` | Чтение/запись `xplain.agent.*` (`read/view/save`, цель global/workspace, дефолты не записываются), ключи в `SecretStorage` по провайдеру, фабрика провайдера, подпись для футера, `listModels()` (`GET /models` для чат-провайдеров), `test()` (список моделей / ping) |
 | `agent/stream.ts` | Общие примитивы: `fetchWithTimeout` (таймаут и abort на заголовки и тело), `readLines` (NDJSON), `readSse` (SSE: `event:`/`data:`, многострочные data, комментарии), `joinUrl` |
-| `agent/prompt.ts` | `buildChatPrompt`: контекст → `{system, user}` для чат-моделей (шаблон → результаты → код в fenced-блоках с диапазонами → вопрос), `DEFAULT_SYSTEM_PROMPT`, `detectHtml` |
+| `agent/prompt.ts` | `buildChatPrompt`: язык + (опц.) диаграммы + шаблон → результаты → код → вопрос; `DEFAULT_SYSTEM_PROMPT`, `detectHtml` |
+| `skills/excalidrawInstructions.ts` | Текст инструкций для агента (без `vscode`) |
+| `skills/excalidraw.ts` | Копирование bundled-скилла `skills/excalidraw-diagram/` → `.claude/skills/excalidraw-diagram/` |
 | `agent/HttpAgentProvider.ts` | Провайдер `xplain`: `fetch` к endpoint, JSON / NDJSON / SSE по контракту XPlain |
 | `agent/hermesHints.ts` | Распознавание типичной ошибки: Base URL указывает на Hermes dashboard, а не на API-сервер (`GET /api/status` → `gateway_platforms.api_server.listener_base`), текст подсказки с нужным адресом/портом |
 | `agent/OpenAIChatProvider.ts` | Провайдеры `hermes` и `openai`: Chat Completions, SSE-чанки, пропуск сторонних событий (`hermes.tool.progress`), `listOpenAIModels` |
@@ -70,7 +72,7 @@ webview/
   vscode.ts           обёртка acquireVsCodeApi: post(), onHostMessage(), persist()/getPersisted()
   markdown.ts         markdown-it (html:false, linkify) + highlight.js (common + cuda/cpp)
   components/
-    ContextTab.tsx    список элементов, шаблон, вопрос (debounce 250 мс), Send/Cancel
+    ContextTab.tsx    список элементов, шаблон, язык ответа, чекбокс Excalidraw, вопрос (debounce 250 мс), Send/Cancel
     ResultTab.tsx     рендер Markdown / iframe для HTML / потоковый вывод / переименование
     TemplatesTab.tsx  редактор шаблона (имя, инструкция, файлы, drop-zone), список шаблонов
     HistoryTab.tsx    список сессий с фильтром
@@ -94,7 +96,7 @@ webview/
 `clearDraft`, `send`, `cancel`, `openSession`, `openSessionInEditor`, `addSessionToDraft`, `deleteSession`,
 `renameSession`, `revealAnchor`, `togglePickMode`, `saveTemplate`, `deleteTemplate`, `loadTemplateForEdit`,
 `pickTemplateFiles`, `readUris`, `chooseBackground`, `clearBackground`, `dropBackground`, `openSettings`,
-`saveAgentSettings` (settings + target), `setAgentKey`, `clearAgentKey`, `testAgent`, `listModels` (settings + requestId), `openExternal`, `log`.
+`saveAgentSettings` (settings + target), `setAgentKey`, `clearAgentKey`, `testAgent`, `listModels` (settings + requestId), `setExplainLanguage`, `setUseExcalidraw`, `openExternal`, `log`.
 
 Принцип: источник истины — хост. Webview отправляет намерение, хост меняет состояние и рассылает
 обновление (`draft`, `sessions`, …). Исключение — локальный текст вопроса (debounce), черновик шаблона и

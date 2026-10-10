@@ -7,6 +7,7 @@ import { AgentError, type AgentItem, type AgentRequest } from './agent/AgentProv
 import { AgentRegistry, PROVIDER_LABELS } from './agent/AgentRegistry';
 import { deriveTitle } from './agent/titles';
 import { ContextDraft } from './context/ContextDraft';
+import { ensureExcalidrawSkillInstalled, EXCALIDRAW_SKILL_WORKSPACE_PATH } from './skills/excalidraw';
 import { formatRange } from './editor/anchors';
 import { toRange } from './editor/decorations';
 import { LiveAnchors } from './editor/LiveAnchors';
@@ -193,6 +194,19 @@ export class XplainController implements vscode.Disposable {
     const agentItems = await this.buildAgentItems(draft);
     const settings = this.agents.read();
     const provider = this.agents.provider(settings);
+
+    let excalidrawSkillPath: string | undefined;
+    if (draft.useExcalidraw) {
+      try {
+        excalidrawSkillPath = await ensureExcalidrawSkillInstalled(this.d.context.extensionUri);
+        this.d.output.appendLine(`[skills] installed Excalidraw skill → ${excalidrawSkillPath}`);
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        this.d.view.post({ type: 'notice', level: 'error', message: `Could not install the Excalidraw skill: ${message}` });
+        return;
+      }
+    }
+
     const provisionalTitle = deriveTitle({ question: draft.question, format: 'markdown', content: '', items: draft.items });
     const session = await store.createSession({
       title: provisionalTitle,
@@ -212,8 +226,14 @@ export class XplainController implements vscode.Disposable {
       question: draft.question,
       items: agentItems,
       workspace: vscode.workspace.workspaceFolders?.[0]?.name,
+      explainLanguage: draft.explainLanguage,
+      useExcalidraw: draft.useExcalidraw,
+      excalidrawSkillPath: draft.useExcalidraw ? excalidrawSkillPath ?? EXCALIDRAW_SKILL_WORKSPACE_PATH : undefined,
     };
-    this.d.output.appendLine(`[send] session ${session.id} via ${provider.id}: ${agentItems.length} item(s)`);
+    this.d.output.appendLine(
+      `[send] session ${session.id} via ${provider.id}: ${agentItems.length} item(s), lang=${draft.explainLanguage}` +
+        (draft.useExcalidraw ? ', excalidraw=on' : ''),
+    );
 
     try {
       const response = await vscode.window.withProgress(
@@ -489,6 +509,12 @@ export class XplainController implements vscode.Disposable {
           break;
         case 'setTemplate':
           this.d.draft.setTemplate(m.templateId);
+          break;
+        case 'setExplainLanguage':
+          this.d.draft.setExplainLanguage(m.language);
+          break;
+        case 'setUseExcalidraw':
+          this.d.draft.setUseExcalidraw(m.enabled);
           break;
         case 'removeItem':
           this.d.draft.removeAt(m.index);
