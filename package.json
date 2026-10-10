@@ -269,9 +269,9 @@
         },
         "xplain.agent.timeoutMs": {
           "type": "number",
-          "default": 180000,
+          "default": 600000,
           "minimum": 1000,
-          "description": "Request timeout in milliseconds."
+          "description": "Idle timeout in milliseconds (default 10 min). Time allowed with no activity: waiting for response headers, then silence between body chunks. Any received data (SSE keepalives, tool-progress events, content) resets the timer. Aborting cancels the agent-side request."
         },
         "xplain.agent.streaming": {
           "type": "boolean",

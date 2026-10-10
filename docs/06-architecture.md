@@ -44,7 +44,7 @@ flowchart LR
 | `editor/pickMode.ts` | Флаг pick mode, status bar item, контекстный ключ `xplain.pickMode`, автовыключение |
 | `agent/AgentProvider.ts` | Интерфейс `AgentProvider`, типы `AgentRequest/AgentItem/AgentResponse`, `AgentError` |
 | `agent/AgentRegistry.ts` | Чтение/запись `xplain.agent.*` (`read/view/save`, цель global/workspace, дефолты не записываются), ключи в `SecretStorage` по провайдеру, фабрика провайдера, подпись для футера, `listModels()` (`GET /models` для чат-провайдеров), `test()` (список моделей / ping) |
-| `agent/stream.ts` | Общие примитивы: `fetchWithTimeout` (таймаут и abort на заголовки и тело), `readLines` (NDJSON), `readSse` (SSE: `event:`/`data:`, многострочные data, комментарии), `joinUrl` |
+| `agent/stream.ts` | Общие примитивы: `fetchWithTimeout` (idle-таймаут, сброс на каждом чанке тела), `withActivityBump`, `readLines` (NDJSON), `readSse` (SSE), `joinUrl` |
 | `agent/prompt.ts` | `buildChatPrompt`: язык + (опц.) диаграммы + шаблон → результаты → Scope/Focus blocks + Full files (context) → вопрос; `DEFAULT_SYSTEM_PROMPT`, `detectHtml` |
 | `skills/excalidrawInstructions.ts` | Текст инструкций для агента (без `vscode`) |
 | `skills/excalidraw.ts` | Копирование bundled-скилла `skills/excalidraw-diagram/` → `.claude/skills/excalidraw-diagram/` |

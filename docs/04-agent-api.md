@@ -12,7 +12,7 @@ XPlain не содержит LLM — он формирует контекст и
 | `xplain` | Собственный сервис, говорящий на контракте XPlain (ниже) | JSON или NDJSON |
 | `mock` | Встроенный ответ без сети | — |
 
-Общие параметры для всех: `timeoutMs` (таймаут на заголовки **и** тело ответа), `streaming`,
+Общие параметры для всех: `timeoutMs` (idle-таймаут: тишина до заголовков / между чанками тела; сброс на любом байте), `streaming`,
 `headers` (дополнительные HTTP-заголовки). Ключи API хранятся в `SecretStorage` по одному на провайдера
 (`xplain.agent.apiKey.<provider>`), в `settings.json` и `.xplain/` не попадают.
 
@@ -235,7 +235,8 @@ Authorization: Bearer <ключ>                       # если задан к�
 | --- | --- |
 | HTTP-статус не 2xx | Ошибка `HTTP <код>: <первые 500 символов тела>` (для OpenAI/Anthropic — текст `error.message`) |
 | Сетевая ошибка / сервис недоступен | `Cannot reach agent at <url>: …` |
-| Превышен `xplain.agent.timeoutMs` (заголовки или тело) | `Agent did not respond within N ms` |
+| Нет ответа в течение `timeoutMs` (до заголовков) | `Agent did not respond within N ms` |
+| Тишина `timeoutMs` после начала тела (нет чанков) | `Agent went idle for N ms (no data)…` — запрос abort'нут, агент (Hermes/GPU) тоже останавливается. Увеличьте idle-таймаут или убедитесь, что сервер шлёт keepalive / progress |
 | Отмена пользователем | Сессия удаляется, уведомление «Request cancelled» |
 | Событие `error` в потоке | Сообщение показывается пользователю, сессия помечена `failed` |
 | Пустой ответ | `… empty answer` / `Agent stream finished without any content` |

@@ -307,8 +307,8 @@ export function AgentTab({ settings, test, testing, onTestStart, models: modelsR
           <summary>
             <span class="codicon codicon-settings" /> Advanced
           </summary>
-          <Field label="Timeout, ms">
-            <input class="input" type="number" min={1000} step={1000} value={form.timeoutMs} onInput={(e) => update({ timeoutMs: Number(val(e)) || 180000 })} />
+          <Field label="Idle timeout, ms (resets on every chunk / keepalive)">
+            <input class="input" type="number" min={1000} step={1000} value={form.timeoutMs} onInput={(e) => update({ timeoutMs: Number(val(e)) || 600000 })} />
           </Field>
           <label class="check">
             <input type="checkbox" checked={form.streaming} onChange={(e) => update({ streaming: (e.target as HTMLInputElement).checked })} /> Stream partial output

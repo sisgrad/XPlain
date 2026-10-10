@@ -11,7 +11,7 @@ describe('HttpAgentProvider', () => {
   let endpoint: string;
   let lastBody: unknown;
   let lastHeaders: http.IncomingHttpHeaders;
-  let mode: 'json' | 'ndjson' | 'ndjson-content' | 'error' | 'slow' | 'text';
+  let mode: 'json' | 'ndjson' | 'ndjson-content' | 'error' | 'slow' | 'text' | 'ndjson-slow-chunks' | 'headers-ok-then-idle';
 
   before(async () => {
     server = http.createServer((req, res) => {
@@ -47,6 +47,20 @@ describe('HttpAgentProvider', () => {
             break;
           case 'slow':
             setTimeout(() => res.end('{}'), 2000);
+            break;
+          case 'ndjson-slow-chunks': {
+            // Total wall time ~250ms, but each gap is < idle timeout (150ms) so it must succeed.
+            res.setHeader('content-type', 'application/x-ndjson');
+            res.write(JSON.stringify({ type: 'delta', text: 'A' }) + '\n');
+            setTimeout(() => res.write(JSON.stringify({ type: 'delta', text: 'B' }) + '\n'), 80);
+            setTimeout(() => res.write(JSON.stringify({ type: 'delta', text: 'C' }) + '\n'), 160);
+            setTimeout(() => res.end(JSON.stringify({ type: 'done', format: 'markdown' }) + '\n'), 240);
+            break;
+          }
+          case 'headers-ok-then-idle':
+            res.setHeader('content-type', 'application/x-ndjson');
+            res.write(JSON.stringify({ type: 'delta', text: 'x' }) + '\n');
+            // Never end — idle timeout should fire while reading the body.
             break;
         }
       });
@@ -101,12 +115,23 @@ describe('HttpAgentProvider', () => {
     await assert.rejects(provider().explain(request, { signal: new AbortController().signal }), /HTTP 500: boom/);
   });
 
-  it('times out and can be cancelled', async () => {
+  it('times out waiting for headers and can be cancelled', async () => {
     mode = 'slow';
     await assert.rejects(provider({ timeoutMs: 100 }).explain(request, { signal: new AbortController().signal }), /did not respond/);
     const ac = new AbortController();
     const p = provider().explain(request, { signal: ac.signal });
     setTimeout(() => ac.abort(), 30);
     await assert.rejects(p, /Cancelled/);
+  });
+
+  it('idle timeout resets on each streamed chunk (total wall time may exceed timeoutMs)', async () => {
+    mode = 'ndjson-slow-chunks';
+    const res = await provider({ timeoutMs: 150 }).explain(request, { signal: new AbortController().signal });
+    assert.equal(res.content, 'ABC');
+  });
+
+  it('aborts when the body goes idle after headers', async () => {
+    mode = 'headers-ok-then-idle';
+    await assert.rejects(provider({ timeoutMs: 120 }).explain(request, { signal: new AbortController().signal }), /went idle/);
   });
 });

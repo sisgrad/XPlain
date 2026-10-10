@@ -33,7 +33,7 @@ export const PROVIDER_LABELS: Record<AgentProviderId, string> = {
 export const DEFAULT_SETTINGS: AgentSettings = {
   provider: 'xplain',
   endpoint: 'http://127.0.0.1:8765/explain',
-  timeoutMs: 180000,
+  timeoutMs: 600000,
   streaming: true,
   headers: {},
   systemPrompt: '',

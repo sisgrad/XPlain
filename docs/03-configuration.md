@@ -19,7 +19,7 @@
 | `xplain.agent.anthropic.model` | string | `claude-sonnet-5` | [anthropic] Id модели Claude |
 | `xplain.agent.anthropic.maxTokens` | number ≥ 256 | `8192` | [anthropic] `max_tokens` ответа |
 | `xplain.agent.systemPrompt` | string (многострочная) | `""` | [hermes/openai/anthropic] Свой системный промпт; пусто — встроенный промпт XPlain |
-| `xplain.agent.timeoutMs` | number ≥ 1000 | `180000` | Таймаут запроса (мс) на заголовки и тело; для стриминга — общий на весь ответ |
+| `xplain.agent.timeoutMs` | number ≥ 1000 | `600000` | Idle-таймаут (мс): ожидание заголовков, затем тишина между чанками тела. Любые байты (keepalive, tool-progress, delta) сбрасывают таймер. Abort отменяет запрос и на стороне агента |
 | `xplain.agent.streaming` | boolean | `true` | Показывать ответ по мере поступления (NDJSON для `xplain`, SSE для остальных) |
 | `xplain.agent.headers` | object (string → string) | `{}` | Дополнительные HTTP-заголовки для любого провайдера. Ключи API сюда не кладите — см. «Секреты» |
 
