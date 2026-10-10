@@ -7,6 +7,7 @@ out/**
 node_modules/**
 scripts/**
 debug_samples/**
+examples/**
 .xplain/**
 .gitignore
 .eslintrc.json
