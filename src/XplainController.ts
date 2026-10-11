@@ -5,6 +5,7 @@
 import * as fs from 'node:fs/promises';
 import * as vscode from 'vscode';
 import { AgentError, type AgentItem, type AgentRequest } from './agent/AgentProvider';
+import { withSharedInstructions } from './agent/prompt';
 import { AgentRegistry, PROVIDER_LABELS } from './agent/AgentRegistry';
 import { inlineLocalAssets } from './agent/inlineAssets';
 import { recoverHtmlAnswer } from './agent/recoverHtml';
@@ -236,20 +237,24 @@ export class XplainController implements vscode.Disposable {
     this.d.view.post({ type: 'tab', tab: 'result' });
 
     const folder = vscode.workspace.workspaceFolders?.[0];
-    const request: AgentRequest = {
-      sessionId: session.id,
-      question: draft.question,
-      items: agentItems,
-      workspace: folder?.name,
-      workspaceRoot: folder?.uri.fsPath,
-      explainLanguage: draft.explainLanguage,
-      useExcalidraw: draft.useExcalidraw,
-      excalidrawSkillPath: draft.useExcalidraw ? excalidrawSkillPath ?? EXCALIDRAW_SKILL_CANONICAL_PATH : undefined,
-      excalidrawSkillCanonicalPath: draft.useExcalidraw
-        ? excalidrawSkillCanonicalPath ?? EXCALIDRAW_SKILL_CANONICAL_PATH
-        : undefined,
-      excalidrawSkillBridge: draft.useExcalidraw ? excalidrawSkillBridge ?? 'none' : undefined,
-    };
+    // One shared systemPrompt + instructions string for every provider (chat, Cursor, HTTP).
+    const request: AgentRequest = withSharedInstructions(
+      {
+        sessionId: session.id,
+        question: draft.question,
+        items: agentItems,
+        workspace: folder?.name,
+        workspaceRoot: folder?.uri.fsPath,
+        explainLanguage: draft.explainLanguage,
+        useExcalidraw: draft.useExcalidraw,
+        excalidrawSkillPath: draft.useExcalidraw ? excalidrawSkillPath ?? EXCALIDRAW_SKILL_CANONICAL_PATH : undefined,
+        excalidrawSkillCanonicalPath: draft.useExcalidraw
+          ? excalidrawSkillCanonicalPath ?? EXCALIDRAW_SKILL_CANONICAL_PATH
+          : undefined,
+        excalidrawSkillBridge: draft.useExcalidraw ? excalidrawSkillBridge ?? 'none' : undefined,
+      },
+      settings.systemPrompt,
+    );
     this.d.output.appendLine(
       `[send] session ${session.id} via ${provider.id}: ${agentItems.length} item(s), lang=${draft.explainLanguage}` +
         (draft.useExcalidraw ? ', excalidraw=on' : ''),

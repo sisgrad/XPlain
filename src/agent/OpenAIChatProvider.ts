@@ -32,7 +32,7 @@ export class OpenAIChatProvider implements AgentProvider {
     const cfg = await this.getConfig();
     if (!cfg.baseUrl) throw new AgentError(`${this.label}: base URL is not configured.`);
     if (!cfg.model) throw new AgentError(`${this.label}: model is not configured.`);
-    const prompt = buildChatPrompt(request, cfg.systemPrompt);
+    const prompt = buildChatPrompt(request, request.systemPrompt ?? cfg.systemPrompt);
     const body: Record<string, unknown> = {
       model: cfg.model,
       messages: [

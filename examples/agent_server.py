@@ -15,12 +15,17 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 
 def explain(payload: dict):
-    """Yield (event_type, data) tuples. Replace with your agent."""
+    """Yield (event_type, data) tuples. Replace with your agent.
+
+    Real agents should honour payload["systemPrompt"] and payload["instructions"] —
+    the same shared text chat/Cursor providers receive from XPlain.
+    """
     question = (payload.get("question") or "").strip()
     items = payload.get("items", [])
     code = [i for i in items if i.get("type") == "code"]
     results = [i for i in items if i.get("type") == "result"]
     templates = [i for i in items if i.get("type") == "template"]
+    instructions = (payload.get("instructions") or "").strip()
 
     first = code[0] if code else None
     title = question or (f"{first['file'].split('/')[-1]} L{first['startLine']}-L{first['endLine']}" if first else "Explanation")
@@ -29,6 +34,8 @@ def explain(payload: dict):
     chunks = [f"# {title}\n\n"]
     if question:
         chunks.append(f"> {question}\n\n")
+    if instructions:
+        chunks.append(f"_Shared XPlain instructions received ({len(instructions)} chars)._\n\n")
     chunks.append(f"Received **{len(code)}** code block(s), {len(results)} previous result(s), {len(templates)} template(s).\n\n")
     for c in code:
         lines = c["text"].split("\n")

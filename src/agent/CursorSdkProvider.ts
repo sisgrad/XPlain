@@ -68,20 +68,9 @@ export class CursorSdkProvider implements AgentProvider {
 
     const sdk = loadSdk();
     ensureStore(sdk, cfg.storeDir);
-    const prompt = buildChatPrompt(request, cfg.systemPrompt);
-    const message = [
-      prompt.system,
-      '',
-      '---',
-      '',
-      prompt.user,
-      '',
-      '## Cursor / tool-use note',
-      'Use tools to render diagrams to disk, then put only short path `src`s in the HTML.',
-      'Never stream base64 / data: URIs in the assistant message — XPlain inlines local images afterward.',
-      'Your final assistant message must still be the complete HTML document text (with path references).',
-      'Do not end with a stub that only points at a file — XPlain saves the message body as result.html.',
-    ].join('\n');
+    // Same system + user instructions as Hermes / OpenAI / Anthropic / XPlain HTTP.
+    const prompt = buildChatPrompt(request, request.systemPrompt ?? cfg.systemPrompt);
+    const message = [prompt.system, '', '---', '', prompt.user].join('\n');
 
     let agent: Awaited<ReturnType<typeof sdk.Agent.create>> | undefined;
     let run: Awaited<ReturnType<NonNullable<typeof agent>['send']>> | undefined;

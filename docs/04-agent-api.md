@@ -128,21 +128,25 @@ Authorization: Bearer <ключ>                       # если задан к�
   "sessionId": "mv2ngpzs-a1e0626c",   // id сессии в .xplain/sessions/<id>/
   "question": "Why does the MMA warp wait on this barrier?",  // может быть пустой строкой
   "workspace": "XPlain",              // имя папки проекта (опционально)
+  "workspaceRoot": "/hdd/XPlain",     // абсолютный корень workspace (опционально)
   "explainLanguage": "en",            // "en" | "ru" — язык письменного ответа
   "useExcalidraw": false,             // true → агент обязан использовать Excalidraw-скилл
   "excalidrawSkillPath": ".cursor/skills/excalidraw-diagram",        // путь для агента (bridge или store)
   "excalidrawSkillCanonicalPath": ".xplain/skills/excalidraw-diagram", // устойчивое хранилище
   "excalidrawSkillBridge": "cursor",  // "cursor" | "claude" | "none"
+  "systemPrompt": "You are XPlain…",  // общий system — тот же текст, что у chat/Cursor
+  "instructions": "## Language\n…\n## Output format…", // общий user-блок инструкций
   "items": [ /* в порядке, заданном пользователем */ ]
 }
 ```
 
-Поля `explainLanguage` / `useExcalidraw` / skill-пути выставляются вкладкой Context и адаптируются под
-`provider` при Send. Канон всегда `.xplain/skills/<id>/`; для Cursor/Hermes/Anthropic при необходимости
-создаётся discovery-bridge (`.cursor/skills/` или `.claude/skills/`). Для чат-провайдеров XPlain
-вшивает секции `## Language` / `## Diagrams` в user-сообщение; контракт `xplain` читает поля сам.
-Upstream-скилл: `skills/excalidraw-diagram/` в расширении
-([coleam00/excalidraw-diagram-skill](https://github.com/coleam00/excalidraw-diagram-skill)).
+**Одинаковые инструкции для всех агентов.** Перед Send XPlain вызывает `withSharedInstructions`
+(`src/agent/prompt.ts`): один `systemPrompt` + один блок `instructions` (язык, HTML с путями к
+картинкам, опционально Excalidraw). Hermes / OpenAI / Anthropic / Cursor SDK получают тот же текст
+через `buildChatPrompt`; провайдер `xplain` получает те же поля в JSON. Нет отдельных «курсорных»
+правил про base64. Поля `explainLanguage` / `useExcalidraw` / skill-пути выставляет Context; канон
+скилла — `.xplain/skills/<id>/`, при необходимости bridge в `.cursor/skills/` или `.claude/skills/`.
+Upstream: `skills/excalidraw-diagram/` ([coleam00/excalidraw-diagram-skill](https://github.com/coleam00/excalidraw-diagram-skill)).
 
 #### Элементы `items`
 

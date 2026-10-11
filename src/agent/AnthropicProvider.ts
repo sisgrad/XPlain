@@ -28,7 +28,7 @@ export class AnthropicProvider implements AgentProvider {
     if (!cfg.baseUrl) throw new AgentError('Anthropic: base URL is not configured.');
     if (!cfg.model) throw new AgentError('Anthropic: model is not configured.');
     if (!cfg.apiKey) throw new AgentError('Anthropic: API key is not set (Agent tab → API key).');
-    const prompt = buildChatPrompt(request, cfg.systemPrompt);
+    const prompt = buildChatPrompt(request, request.systemPrompt ?? cfg.systemPrompt);
     const body = {
       model: cfg.model,
       max_tokens: cfg.maxTokens,

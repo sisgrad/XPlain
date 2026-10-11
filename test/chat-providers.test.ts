@@ -5,7 +5,14 @@ import type { AgentRequest } from '../src/agent/AgentProvider';
 import { AnthropicProvider, listAnthropicModels } from '../src/agent/AnthropicProvider';
 import { listOpenAIModels, OpenAIChatProvider } from '../src/agent/OpenAIChatProvider';
 import { describeDashboardMistake, parseDashboardStatus, probeDashboard } from '../src/agent/hermesHints';
-import { buildChatPrompt, DEFAULT_SYSTEM_PROMPT, detectHtml, formatCodeSections } from '../src/agent/prompt';
+import {
+  buildChatPrompt,
+  buildSharedInstructions,
+  DEFAULT_SYSTEM_PROMPT,
+  detectHtml,
+  formatCodeSections,
+  withSharedInstructions,
+} from '../src/agent/prompt';
 import { joinUrl } from '../src/agent/stream';
 
 const request: AgentRequest = {
@@ -114,6 +121,26 @@ describe('buildChatPrompt', () => {
     assert.match(p.system, /ONE HTML document/);
     assert.match(p.user, /Output format/);
     assert.match(p.user, /<!DOCTYPE html>/);
+  });
+
+  it('attaches identical shared instructions for every provider path', () => {
+    const prepared = withSharedInstructions({
+      ...request,
+      workspace: 'XPlain',
+      workspaceRoot: '/hdd/XPlain',
+      explainLanguage: 'ru',
+      useExcalidraw: true,
+      excalidrawSkillPath: '.xplain/skills/excalidraw-diagram',
+      excalidrawSkillCanonicalPath: '.xplain/skills/excalidraw-diagram',
+      excalidrawSkillBridge: 'none',
+    });
+    assert.equal(prepared.systemPrompt, DEFAULT_SYSTEM_PROMPT);
+    assert.equal(prepared.instructions, buildSharedInstructions(prepared));
+    assert.match(prepared.instructions!, /do \*\*not\*\* emit `data:` URIs or base64/i);
+    assert.match(prepared.instructions!, /## Diagrams/);
+    const chat = buildChatPrompt(prepared);
+    assert.equal(chat.system, prepared.systemPrompt);
+    assert.ok(chat.user.startsWith(prepared.instructions!));
   });
 
   it('detects HTML documents', () => {

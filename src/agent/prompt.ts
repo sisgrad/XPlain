@@ -48,12 +48,19 @@ export interface ChatPrompt {
   user: string;
 }
 
-export function buildChatPrompt(request: AgentRequest, systemPrompt?: string): ChatPrompt {
+/**
+ * Shared instruction text for **every** provider (chat, Cursor SDK, XPlain HTTP).
+ * Language + HTML/path-image contract + optional Excalidraw — no provider-specific forks.
+ */
+export function buildSharedInstructions(request: AgentRequest): string {
   const parts: string[] = [];
-  const codes = request.items.filter((i): i is CodeAgentItem => i.type === 'code');
-  const results = request.items.filter((i): i is Extract<AgentItem, { type: 'result' }> => i.type === 'result');
-  const templates = request.items.filter((i): i is Extract<AgentItem, { type: 'template' }> => i.type === 'template');
-
+  if (request.workspace || request.workspaceRoot) {
+    const bits = [
+      request.workspace ? `name=${request.workspace}` : undefined,
+      request.workspaceRoot ? `root=${request.workspaceRoot}` : undefined,
+    ].filter(Boolean);
+    parts.push(`Workspace: ${bits.join(' · ')}`);
+  }
   parts.push(languageInstruction(request.explainLanguage));
   parts.push(HTML_OUTPUT_INSTRUCTION);
   if (request.useExcalidraw) {
@@ -66,6 +73,25 @@ export function buildChatPrompt(request: AgentRequest, systemPrompt?: string): C
       }),
     );
   }
+  return parts.join('\n\n');
+}
+
+/** Attach the same systemPrompt + instructions every provider will see. */
+export function withSharedInstructions(request: AgentRequest, systemPrompt?: string): AgentRequest {
+  const system = (systemPrompt?.trim() || request.systemPrompt?.trim() || DEFAULT_SYSTEM_PROMPT).trim();
+  return {
+    ...request,
+    systemPrompt: system,
+    instructions: buildSharedInstructions(request),
+  };
+}
+
+export function buildChatPrompt(request: AgentRequest, systemPrompt?: string): ChatPrompt {
+  const prepared = request.instructions && request.systemPrompt ? request : withSharedInstructions(request, systemPrompt);
+  const parts: string[] = [prepared.instructions!];
+  const codes = prepared.items.filter((i): i is CodeAgentItem => i.type === 'code');
+  const results = prepared.items.filter((i): i is Extract<AgentItem, { type: 'result' }> => i.type === 'result');
+  const templates = prepared.items.filter((i): i is Extract<AgentItem, { type: 'template' }> => i.type === 'template');
 
   for (const t of templates) {
     parts.push(`## Template: ${t.name}`);
@@ -83,26 +109,18 @@ export function buildChatPrompt(request: AgentRequest, systemPrompt?: string): C
     parts.push(...formatCodeSections(codes));
   }
 
-  const q = request.question.trim();
+  const q = prepared.question.trim();
   parts.push(
     `## Question\n${
       q ||
       (codes.length
-        ? 'Explain the focus block(s) above: what they do, how they work, and anything non-obvious or risky. Use the full file(s) only as surrounding context. Answer as self-contained HTML.'
-        : 'Please help with the material above. Answer as self-contained HTML.')
+        ? 'Explain the focus block(s) above: what they do, how they work, and anything non-obvious or risky. Use the full file(s) only as surrounding context. Answer as HTML with path-based images.'
+        : 'Please help with the material above. Answer as HTML with path-based images.')
     }`,
   );
 
-  if (request.workspace || request.workspaceRoot) {
-    const bits = [
-      request.workspace ? `name=${request.workspace}` : undefined,
-      request.workspaceRoot ? `root=${request.workspaceRoot}` : undefined,
-    ].filter(Boolean);
-    parts.unshift(`Workspace: ${bits.join(' · ')}`);
-  }
-
   return {
-    system: (systemPrompt?.trim() || DEFAULT_SYSTEM_PROMPT).trim(),
+    system: (systemPrompt?.trim() || prepared.systemPrompt || DEFAULT_SYSTEM_PROMPT).trim(),
     user: parts.join('\n\n'),
   };
 }

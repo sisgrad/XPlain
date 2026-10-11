@@ -54,6 +54,7 @@ flowchart LR
 | `agent/OpenAIChatProvider.ts` | Провайдеры `hermes` и `openai`: Chat Completions, SSE-чанки, пропуск сторонних событий (`hermes.tool.progress`), `listOpenAIModels` |
 | `agent/AnthropicProvider.ts` | Провайдер `anthropic`: Messages API, `content_block_delta`/`text_delta`, `listAnthropicModels` |
 | `agent/MockAgentProvider.ts` | Офлайн-ответ со стримингом для демо и smoke-тестов |
+| `agent/prompt.ts` | Общие `systemPrompt` + `instructions` для всех провайдеров (`withSharedInstructions`) |
 | `agent/htmlResult.ts` | Нормализация ответа в self-contained `result.html` (HTML / фрагмент / Markdown→HTML) |
 | `agent/inlineAssets.ts` | Встраивание локальных `<img src="…/file.png">` / `url(...)` в `data:` URI (агент не шлёт base64) |
 | `agent/titles.ts` | `deriveTitle`: агент → заголовок md/html → вопрос → файл+диапазон; обрезка до 72 символов |

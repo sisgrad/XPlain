@@ -51,6 +51,16 @@ export interface AgentRequest {
   excalidrawSkillCanonicalPath?: string;
   /** How the skill was exposed for this provider (`none` = prompt path only). */
   excalidrawSkillBridge?: 'cursor' | 'claude' | 'none';
+  /**
+   * Shared system prompt — identical for every provider on a given Send
+   * (`DEFAULT_SYSTEM_PROMPT`, or the single Agent-tab override).
+   */
+  systemPrompt?: string;
+  /**
+   * Shared user-instruction block (language + HTML output contract + optional
+   * Excalidraw). Same text for Hermes / OpenAI / Anthropic / Cursor / XPlain HTTP.
+   */
+  instructions?: string;
 }
 
 export interface AgentResponse {

@@ -40,6 +40,7 @@ export class HttpAgentProvider implements AgentProvider {
     };
     if (cfg.apiKey) headers.Authorization = `Bearer ${cfg.apiKey}`;
 
+    // Body includes shared `systemPrompt` + `instructions` (same text chat/Cursor providers use).
     const timed = await fetchWithTimeout({ url: cfg.endpoint, headers, body: request, timeoutMs: cfg.timeoutMs, signal: options.signal });
     return timed.run(async (res) => {
       const contentType = res.headers.get('content-type') ?? '';
