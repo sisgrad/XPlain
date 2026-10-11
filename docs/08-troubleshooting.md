@@ -117,6 +117,14 @@ dashboard с cookie-аутентификацией; XPlain работает с �
    запускается с `settingSources: ['project']` (иначе SDK не видит project skills).
 3. В Output → XPlain: `[skills] Excalidraw store .xplain/skills/… → bridge .cursor/skills/… for cursor`.
 
+## Диаграммы чужой сессии / render падает на CDN
+
+- Агент обязан писать PNG только в `.xplain/diagrams/<sessionId>/` и не ссылаться на файлы из корня
+  `.xplain/diagrams/` или из другой сессии. Если в HTML старые пути — это нарушение инструкции.
+- Рендерер скилла (`references/render_template.html`) в Playwright импортирует
+  `https://esm.sh/@excalidraw/excalidraw?bundle`. Без доступа к этому CDN export в PNG падает.
+  Проверьте сеть с машины агента; не принимайте «fallback» на чужие PNG.
+
 ## Cursor SDK вернул короткий текст вместо HTML
 
 Cursor-агент иногда пишет полный HTML в `.xplain/*.html` и в чат кладёт заглушку («не помещается / open the file»).

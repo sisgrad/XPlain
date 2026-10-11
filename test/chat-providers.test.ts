@@ -81,6 +81,7 @@ describe('buildChatPrompt', () => {
   it('includes Excalidraw skill instructions when useExcalidraw is on', () => {
     const p = buildChatPrompt({
       ...request,
+      sessionId: 'sess-abc',
       useExcalidraw: true,
       excalidrawSkillPath: '.cursor/skills/excalidraw-diagram',
       excalidrawSkillCanonicalPath: '.xplain/skills/excalidraw-diagram',
@@ -92,9 +93,10 @@ describe('buildChatPrompt', () => {
     assert.match(p.user, /\.cursor\/skills\/excalidraw-diagram/);
     assert.match(p.user, /\.xplain\/skills\/excalidraw-diagram/);
     assert.match(p.user, /coleam00\/excalidraw-diagram-skill/);
-    assert.match(p.user, /\.xplain\/diagrams\/foo\.png|path only|Do not.*paste `data:image/i);
+    assert.match(p.user, /\.xplain\/diagrams\/sess-abc/);
+    assert.match(p.user, /Do not reuse other sessions/);
     assert.doesNotMatch(p.user, /embed each PNG as a `data:image/);
-    assert.match(p.user, /\/hdd\/XPlain\/\.xplain\/diagrams/);
+    assert.match(p.user, /\/hdd\/XPlain\/\.xplain\/diagrams\/sess-abc/);
     assert.match(p.system, /Language and Diagrams/);
   });
 
@@ -102,7 +104,8 @@ describe('buildChatPrompt', () => {
     const p = buildChatPrompt(request);
     assert.match(p.system, /Never paste or stream base64/i);
     assert.match(p.user, /do \*\*not\*\* emit `data:` URIs or base64/i);
-    assert.match(p.user, /\.xplain\/diagrams\//);
+    assert.match(p.user, /\.xplain\/diagrams\/<sessionId>/);
+    assert.match(p.system, /Never reuse PNGs from other sessions/i);
   });
 
   it('omits diagram instructions when useExcalidraw is off', () => {

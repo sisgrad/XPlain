@@ -18,7 +18,7 @@ Rules:
 - The document MUST start with <!DOCTYPE html> and include <html>, <head>, and <body>.
 - Put a concise, specific chat-like title (max 8 words) in <title> and as a single <h1> at the start of <body>. Do not use generic titles.
 - Embed all CSS in a <style> block in <head> (dark-friendly, readable typography, styled tables and code blocks). Do not link external stylesheets or scripts.
-- For images/diagrams: produce binary files with tools (e.g. Excalidraw → PNG under .xplain/diagrams/), then reference them with short filesystem paths in <img src="...">. Never paste or stream base64 / data: URIs in the answer — that wastes tokens; XPlain inlines local files into result.html after you finish.
+- For images/diagrams: produce binary files with tools for **this session only** (Excalidraw → PNG under .xplain/diagrams/<sessionId>/), then reference those new paths in <img src>. Never reuse PNGs from other sessions or from .xplain/diagrams/ root. Never paste or stream base64 / data: URIs — XPlain inlines the files you created after you finish.
 - Never replace the HTML answer with a short note that the document was written to a file. Always emit the full HTML document as the reply text (paths only — no embedded binaries).
 - Structure the body with semantic HTML: h2/h3 sections, lists, tables, <pre><code> for code with a language hint in a class when useful.
 - Explain ONLY the focus block(s) (the marked line ranges). Use the full file only as context to understand callers, types, helpers and surrounding code — do not write a line-by-line explanation of the entire file unless the user explicitly asks for that.
@@ -34,12 +34,12 @@ export const HTML_OUTPUT_INSTRUCTION = [
   '- Include `<title>` (short chat-like title) and inline `<style>` — no external CSS/JS.',
   '- Body starts with one `<h1>` matching the title.',
   '- **Images (important):** do **not** emit `data:` URIs or base64 in the message. That burns tokens.',
-  '  1. Create image files with tools (render PNG/SVG to disk, typically under `.xplain/diagrams/`).',
-  '  2. In the HTML, use short path `src` values, e.g. `<img src=".xplain/diagrams/foo.png" alt="…">`.',
-  '  3. XPlain rewrites those paths into embedded `data:` URIs when saving `result.html` — you do not.',
+  '  1. Create **new** image files for this session with tools (render under `.xplain/diagrams/<sessionId>/` — see Diagrams section).',
+  '  2. In the HTML, use short path `src` values pointing only at those new files.',
+  '  3. **Never** reuse or re-link diagrams from other sessions or from a shared diagrams folder.',
+  '  4. XPlain rewrites those paths into embedded `data:` URIs when saving `result.html` — you do not.',
   '- **Critical:** the HTML text (with path references) MUST be the assistant message body itself.',
   '  Do **not** write only a stub that points at a file — XPlain saves the message as result.html.',
-  '  Writing intermediate diagram sources under `.xplain/diagrams/` is fine and expected.',
   'If you can only produce Markdown, still answer — XPlain will wrap it into HTML and inline local image paths.',
 ].join('\n');
 
@@ -70,6 +70,7 @@ export function buildSharedInstructions(request: AgentRequest): string {
         canonicalPath: request.excalidrawSkillCanonicalPath,
         workspaceRoot: request.workspaceRoot,
         bridge: request.excalidrawSkillBridge,
+        sessionId: request.sessionId,
       }),
     );
   }

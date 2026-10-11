@@ -109,11 +109,15 @@
 ## `sessions/<id>/result.html`
 
 Ответ агента — HTML-документ (`<!DOCTYPE html>`, inline CSS). Агент **не** должен генерировать base64
-в ответе: он рендерит PNG инструментами в `.xplain/diagrams/` и ставит короткие пути в `<img src>`.
-При сохранении и открытии XPlain встраивает эти файлы как `data:` URI (`src/agent/inlineAssets.ts`),
-чтобы `result.html` стал self-contained для панели Result. Исходники `.excalidraw` / `.png` остаются
-на диске для правок. Старые сессии с `result.md` открываются; при повторном завершении файл другого
-формата удаляется.
+в ответе: он рендерит PNG инструментами в **`.xplain/diagrams/<sessionId>/`** (изолированно на сессию)
+и ставит короткие пути в `<img src>`. Переиспользовать PNG из других сессий или из корня
+`.xplain/diagrams/` запрещено. При сохранении и открытии XPlain встраивает эти файлы как `data:` URI
+(`src/agent/inlineAssets.ts`), чтобы `result.html` стал self-contained. Исходники остаются на диске
+для правок. Старые сессии с `result.md` открываются; при повторном завершении файл другого формата
+удаляется.
+
+Рендерер Excalidraw-скилла тянет `@excalidraw/excalidraw` с `esm.sh` в headless Chromium; без доступа
+к CDN PNG не собрать — агент должен чинить render, а не подставлять чужие картинки.
 
 ## `templates/<id>/`
 

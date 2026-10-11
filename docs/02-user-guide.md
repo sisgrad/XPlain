@@ -54,8 +54,8 @@
   **`.xplain/skills/excalidraw-diagram/`** (агент-агностичное хранилище) и в runtime адаптирует его под
   выбранного агента: для Cursor — bridge в `.cursor/skills/` + `settingSources: project`, для Hermes/Anthropic —
   bridge в `.claude/skills/`, для остальных — путь к store в промпте. Агент рендерит PNG в
-  `.xplain/diagrams/` и ссылается на них путями; XPlain сам встраивает файлы в `result.html`
-  (агент не должен стримить base64).
+  `.xplain/diagrams/<sessionId>/` (без переиспользования чужих картинок) и ссылается путями;
+  XPlain сам встраивает файлы в `result.html` (агент не должен стримить base64).
 
 Шаблон, язык и чекбокс диаграмм сохраняются между отправками, Clear context и перезагрузками окна
 (workspaceState). Текст вопроса после отправки/очистки не сохраняется.

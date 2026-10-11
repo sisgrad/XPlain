@@ -144,9 +144,10 @@ Authorization: Bearer <ключ>                       # если задан к�
 (`src/agent/prompt.ts`): один `systemPrompt` + один блок `instructions` (язык, HTML с путями к
 картинкам, опционально Excalidraw). Hermes / OpenAI / Anthropic / Cursor SDK получают тот же текст
 через `buildChatPrompt`; провайдер `xplain` получает те же поля в JSON. Нет отдельных «курсорных»
-правил про base64. Поля `explainLanguage` / `useExcalidraw` / skill-пути выставляет Context; канон
-скилла — `.xplain/skills/<id>/`, при необходимости bridge в `.cursor/skills/` или `.claude/skills/`.
-Upstream: `skills/excalidraw-diagram/` ([coleam00/excalidraw-diagram-skill](https://github.com/coleam00/excalidraw-diagram-skill)).
+правил про base64. Диаграммы — только в `.xplain/diagrams/<sessionId>/`, без переиспользования
+чужих PNG. Поля `explainLanguage` / `useExcalidraw` / skill-пути выставляет Context; канон скилла —
+`.xplain/skills/<id>/`, при необходимости bridge. Upstream: `skills/excalidraw-diagram/`
+([coleam00/excalidraw-diagram-skill](https://github.com/coleam00/excalidraw-diagram-skill)).
 
 #### Элементы `items`
 
