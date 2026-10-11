@@ -77,8 +77,10 @@ export class CursorSdkProvider implements AgentProvider {
       prompt.user,
       '',
       '## Cursor / tool-use note',
-      'Your final assistant message must be the complete HTML document text (including data: URIs).',
-      'Do not end with a stub that points at a file path — XPlain cannot use that as the Result panel content.',
+      'Use tools to render diagrams to disk, then put only short path `src`s in the HTML.',
+      'Never stream base64 / data: URIs in the assistant message — XPlain inlines local images afterward.',
+      'Your final assistant message must still be the complete HTML document text (with path references).',
+      'Do not end with a stub that only points at a file — XPlain saves the message body as result.html.',
     ].join('\n');
 
     let agent: Awaited<ReturnType<typeof sdk.Agent.create>> | undefined;

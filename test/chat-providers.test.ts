@@ -85,9 +85,17 @@ describe('buildChatPrompt', () => {
     assert.match(p.user, /\.cursor\/skills\/excalidraw-diagram/);
     assert.match(p.user, /\.xplain\/skills\/excalidraw-diagram/);
     assert.match(p.user, /coleam00\/excalidraw-diagram-skill/);
-    assert.match(p.user, /data:image\/png;base64/);
+    assert.match(p.user, /\.xplain\/diagrams\/foo\.png|path only|Do not.*paste `data:image/i);
+    assert.doesNotMatch(p.user, /embed each PNG as a `data:image/);
     assert.match(p.user, /\/hdd\/XPlain\/\.xplain\/diagrams/);
     assert.match(p.system, /Language and Diagrams/);
+  });
+
+  it('tells the agent to use image paths, not base64 in the reply', () => {
+    const p = buildChatPrompt(request);
+    assert.match(p.system, /Never paste or stream base64/i);
+    assert.match(p.user, /do \*\*not\*\* emit `data:` URIs or base64/i);
+    assert.match(p.user, /\.xplain\/diagrams\//);
   });
 
   it('omits diagram instructions when useExcalidraw is off', () => {
@@ -101,9 +109,9 @@ describe('buildChatPrompt', () => {
     assert.match(p.user, /````/); // a longer fence wraps code that itself contains ```
   });
 
-  it('asks for self-contained HTML output', () => {
+  it('asks for HTML output with path-based images', () => {
     const p = buildChatPrompt(request);
-    assert.match(p.system, /self-contained HTML/);
+    assert.match(p.system, /ONE HTML document/);
     assert.match(p.user, /Output format/);
     assert.match(p.user, /<!DOCTYPE html>/);
   });

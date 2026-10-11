@@ -46,7 +46,7 @@ export async function recoverHtmlAnswer(content: string, opts: RecoverHtmlOption
     try {
       const html = await fs.readFile(abs, 'utf8');
       if (!isCompleteHtmlDocument(html)) continue;
-      const score = html.length + ( /data:image\//i.test(html) ? 50_000 : 0);
+      const score = html.length + htmlAssetBonus(html);
       if (!best || score > best.score) best = { path: abs, html, score };
     } catch {
       /* missing */
@@ -59,12 +59,24 @@ export async function recoverHtmlAnswer(content: string, opts: RecoverHtmlOption
   return { html: raw };
 }
 
+function htmlAssetBonus(html: string): number {
+  let n = 0;
+  if (/data:image\//i.test(html)) n += 50_000;
+  // Prefer docs that already point at diagram files (XPlain will inline them).
+  if (/<img[^>]+src=["'][^"']+\.(?:png|jpe?g|gif|webp|svg)/i.test(html)) n += 40_000;
+  return n;
+}
+
 export function isCompleteHtmlDocument(text: string): boolean {
   if (!detectHtml(text)) return false;
   if (!/<\/html>/i.test(text)) return false;
   // Tiny shells that only say "see file X" are not complete answers.
   if (text.length < 800 && STUB_HINT.test(text)) return false;
-  return text.length >= 400 || /data:image\//i.test(text);
+  return (
+    text.length >= 400 ||
+    /data:image\//i.test(text) ||
+    /<img[^>]+src=["'][^"']+\.(?:png|jpe?g|gif|webp|svg)/i.test(text)
+  );
 }
 
 export function extractHtmlPaths(text: string): string[] {

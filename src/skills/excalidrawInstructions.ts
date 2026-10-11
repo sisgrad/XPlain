@@ -45,8 +45,9 @@ export function excalidrawAgentInstructions(
     `1. **Skill for this request:** \`${agentPath}/\` (from ${EXCALIDRAW_SKILL_REPO}). ${bridgeNote}`,
     '2. If that folder is missing or incomplete, restore from the durable store or re-run Send with the Excalidraw checkbox on, then follow `SKILL.md` / `README.md` — including renderer setup (`uv sync` + Playwright Chromium under `references/`) if you need visual validation.',
     `3. **Read** \`${agentPath}/SKILL.md\` and \`${agentPath}/references/color-palette.md\` before drawing. Follow the skill's methodology (diagrams that *argue*, evidence artifacts for technical diagrams). Do not improvise a different diagram toolchain.`,
-    `4. Write \`.excalidraw\` sources and rendered \`.png\` files under \`${diagramsDir}/\` (create the folder if needed).`,
-    '5. **In the final HTML answer, embed each PNG as a `data:image/png;base64,...` URI in `<img src="...">`.** Do not leave filesystem paths in `src` — the Result panel is a self-contained document and cannot load separate asset files. You may still mention the source path in a figcaption for humans.',
+    `4. Write \`.excalidraw\` sources and **render** \`.png\` files under \`${diagramsDir}/\` (create the folder if needed) using the skill's render tools — never invent PNG bytes by hand.`,
+    '5. **In the final HTML, reference each PNG by path only**, e.g. `<img src=".xplain/diagrams/foo.png" alt="…">` (or an absolute path under the workspace).',
+    '   **Do not** paste `data:image/...;base64,...` into the HTML — XPlain inlines those files into `result.html` after you finish. Figcaptions may still mention the path for humans.',
     '6. Do not invent a different diagram format; use this skill.',
   ].join('\n');
 }
