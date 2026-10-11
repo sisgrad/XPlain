@@ -1,6 +1,7 @@
 /** Anthropic Messages API provider (Claude). POST {baseUrl}/v1/messages */
 import { AgentError, type AgentCallOptions, type AgentProvider, type AgentRequest, type AgentResponse } from './AgentProvider';
-import { buildChatPrompt, detectHtml } from './prompt';
+import { ensureSelfContainedHtml, extractHtmlTitle } from './htmlResult';
+import { buildChatPrompt } from './prompt';
 import { fetchWithTimeout, joinUrl, readSse } from './stream';
 
 export const ANTHROPIC_VERSION = '2023-06-01';
@@ -83,7 +84,8 @@ export class AnthropicProvider implements AgentProvider {
     });
 
     if (!content.trim()) throw new AgentError('Anthropic: empty answer.');
-    return { format: detectHtml(content) ? 'html' : 'markdown', content };
+    const html = ensureSelfContainedHtml(content);
+    return { title: extractHtmlTitle(html), format: 'html', content: html };
   }
 }
 

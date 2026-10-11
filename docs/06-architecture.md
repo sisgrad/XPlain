@@ -53,6 +53,7 @@ flowchart LR
 | `agent/OpenAIChatProvider.ts` | Провайдеры `hermes` и `openai`: Chat Completions, SSE-чанки, пропуск сторонних событий (`hermes.tool.progress`), `listOpenAIModels` |
 | `agent/AnthropicProvider.ts` | Провайдер `anthropic`: Messages API, `content_block_delta`/`text_delta`, `listAnthropicModels` |
 | `agent/MockAgentProvider.ts` | Офлайн-ответ со стримингом для демо и smoke-тестов |
+| `agent/htmlResult.ts` | Нормализация ответа в self-contained `result.html` (HTML / фрагмент / Markdown→HTML) |
 | `agent/titles.ts` | `deriveTitle`: агент → заголовок md/html → вопрос → файл+диапазон; обрезка до 72 символов |
 | `panel/XplainViewProvider.ts` | `WebviewViewProvider`: HTML-оболочка, CSP с nonce, `localResourceRoots`, очередь сообщений до resolve |
 | `panel/background.ts` | Выбор/сохранение/очистка фона (user scope в `globalStorageUri`, workspace scope в `.xplain/ui/`), состояние для webview |

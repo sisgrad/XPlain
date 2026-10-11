@@ -11,7 +11,7 @@
   sessions/
     <sessionId>/
       context.json                # что было отправлено, заголовок, статус, ошибка
-      result.md | result.html     # ответ агента (одно из двух)
+      result.html                 # ответ агента (self-contained HTML; старые result.md ещё читаются)
   templates/
     <templateId>/
       template.json               # имя, инструкция, список файлов
@@ -42,7 +42,7 @@
       "createdAt": "2026-10-10T17:05:12.345Z",
       "anchorIds": ["mv2ngpzs-3f1a9c2b"],                   // все блоки этого контекста
       "question": "Why does the MMA warp wait here?",
-      "resultFormat": "markdown",                          // "markdown" | "html"
+      "resultFormat": "html",                              // всегда "html" для новых сессий; "markdown" — legacy
       "status": "done",                                    // "pending" | "done" | "error"
       "error": "…"                                         // только при status = error
     }
@@ -104,10 +104,12 @@
 в сессиях версии 0.1 — `http`), `endpoint` (endpoint или base URL) и `model` (для чат-провайдеров).
 Ключи API в хранилище не попадают.
 
-## `sessions/<id>/result.md` / `result.html`
+## `sessions/<id>/result.html`
 
-Ответ агента как есть. Markdown можно открыть обычным предпросмотром VS Code, HTML — в браузере.
-Формат определяется полем `resultFormat` сессии; при повторном завершении сессии файл другого формата удаляется.
+Ответ агента — один self-contained HTML-документ (`<!DOCTYPE html>`, inline CSS, без внешних скриптов).
+Провайдеры просят модель отдавать HTML; если пришёл Markdown или HTML-фрагмент, XPlain оборачивает его
+в полноценную страницу (`src/agent/htmlResult.ts`). Старые сессии с `result.md` по-прежнему открываются;
+при повторном завершении сессии файл другого формата удаляется.
 
 ## `templates/<id>/`
 

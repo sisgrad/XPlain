@@ -27,8 +27,9 @@ XPlain не содержит LLM — он формирует контекст и
   блоки кода (` ```<language> ` с указанием файла и диапазона строк; если код сам содержит ```` ``` ````,
   ограждение удлиняется) → вопрос пользователя (или просьба объяснить блоки, если вопрос пуст).
 
-Ответ модели — текст; если он выглядит как полноценный HTML-документ (`<!DOCTYPE html>` / `<html>`),
-результат сохраняется как `html`, иначе как `markdown`. Заголовок берётся из первого `#`.
+Ответ модели нормализуется в **self-contained HTML** и сохраняется как `result.html`.
+Промпт просит `<!DOCTYPE html>` с inline CSS; если модель вернула Markdown или HTML-фрагмент,
+XPlain оборачивает его в полноценную страницу. Заголовок — из `<title>` / `<h1>` или первого `#`.
 
 ### Hermes Agent
 
@@ -185,13 +186,13 @@ Authorization: Bearer <ключ>                       # если задан к�
 ```jsonc
 {
   "title": "Barrier phases in the KV loop",   // опционально, ≤ ~70 символов, как название чата
-  "format": "markdown",                       // "markdown" | "html"; по умолчанию markdown
-  "content": "# Barrier phases...\n..."       // обязательное поле
+  "format": "html",                           // "markdown" | "html" — на входе; XPlain всегда сохраняет html
+  "content": "<!DOCTYPE html>..."             // обязательное поле (HTML предпочтителен; Markdown тоже ок)
 }
 ```
 
 Допускаются синонимы: `answer`, `markdown` (вместо `content`), `html` (подразумевает `format: html`).
-Тело, не являющееся JSON, принимается как Markdown целиком.
+Тело, не являющееся JSON, принимается как текст и тоже конвертируется в HTML.
 
 ### Ответ: поток NDJSON
 
@@ -273,8 +274,8 @@ Authorization: Bearer <ключ>                       # если задан к�
 
 - Ключи API живут в `SecretStorage` VS Code (по одному на провайдера), в настройки и `.xplain/` не
   попадают. Отправляются как `Authorization: Bearer` (Hermes, OpenAI, XPlain) или `x-api-key` (Anthropic).
-- Ответ в формате Markdown рендерится без raw-HTML (`html: false`), HTML — в `iframe sandbox="allow-scripts"`
-  без доступа к API VS Code.
+- Итоговый ответ всегда HTML в `iframe sandbox="allow-scripts"` без доступа к API VS Code.
+  Markdown от агента перед сохранением конвертируется без raw-HTML (`markdown-it` `html: false`).
 - При Remote-SSH запрос уходит с удалённой машины (где работает extension host), а не с клиента —
   учитывайте это при настройке сетевого доступа к агенту (например, `127.0.0.1` означает удалённый хост).
 

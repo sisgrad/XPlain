@@ -29,8 +29,8 @@ architecture, development, troubleshooting) lives in the `docs/` folder of the r
    ([coleam00/excalidraw-diagram-skill](https://github.com/coleam00/excalidraw-diagram-skill) —
    XPlain installs it into `.claude/skills/` on send).
 3. Press **Send to agent** (or Ctrl+Enter in the question box). Nothing is sent until you confirm.
-4. The answer streams into the **Result** tab and is saved as `.xplain/sessions/<id>/result.md`
-   (or `result.html` for self-contained HTML answers).
+4. The answer streams into the **Result** tab and is saved as a self-contained
+   `.xplain/sessions/<id>/result.html` (Markdown answers are wrapped into HTML automatically).
 5. Every block that was part of the context gets a CodeLens: `XPlain: <title>` or
    `XPlain: 3 explanations · <latest title>`. Clicking it opens a dropdown of all explanations
    attached to that block; titles are chat-like summaries, not `v1`/`v2`.
@@ -195,7 +195,7 @@ can store it for yourself (all projects) or for this project (`.xplain/ui/`). Tu
 .xplain/
   index.json                      anchors (file, lines, hash, snippet) and session metadata
   sessions/<id>/context.json      everything that was sent, with the title and status
-  sessions/<id>/result.md|html    the agent's answer
+  sessions/<id>/result.html       the agent's answer (self-contained HTML)
   templates/<id>/template.json    name, instruction, file list
   templates/<id>/files/...        attached files
   ui/background.<ext>             optional per-project panel background

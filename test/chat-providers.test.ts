@@ -91,6 +91,13 @@ describe('buildChatPrompt', () => {
     assert.match(p.user, /````/); // a longer fence wraps code that itself contains ```
   });
 
+  it('asks for self-contained HTML output', () => {
+    const p = buildChatPrompt(request);
+    assert.match(p.system, /self-contained HTML/);
+    assert.match(p.user, /Output format/);
+    assert.match(p.user, /<!DOCTYPE html>/);
+  });
+
   it('detects HTML documents', () => {
     assert.equal(detectHtml('<!DOCTYPE html><html></html>'), true);
     assert.equal(detectHtml('# Title\n<b>bold</b>'), false);
@@ -254,7 +261,10 @@ describe('OpenAIChatProvider / AnthropicProvider', () => {
     const deltas: string[] = [];
     const res = await openai({ apiKey: 'k' }).explain(request, { signal: new AbortController().signal, onDelta: (t) => deltas.push(t) });
     assert.deepEqual(deltas, ['# Ti', 'tle\n\nbody']);
-    assert.deepEqual(res, { format: 'markdown', content: '# Title\n\nbody' });
+    assert.equal(res.format, 'html');
+    assert.match(res.content, /^<!DOCTYPE html>/i);
+    assert.match(res.content, /Title/);
+    assert.match(res.content, /body/);
     assert.equal(lastPath, '/v1/chat/completions');
     assert.equal(lastHeaders.authorization, 'Bearer k');
     assert.equal(lastHeaders['x-test'], '1');
@@ -269,7 +279,9 @@ describe('OpenAIChatProvider / AnthropicProvider', () => {
   it('parses a non-streaming JSON completion and sends no Authorization without a key', async () => {
     mode = 'json';
     const res = await openai({ streaming: false, systemPrompt: 'be brief' }).explain(request, { signal: new AbortController().signal });
-    assert.equal(res.content, 'plain answer');
+    assert.equal(res.format, 'html');
+    assert.match(res.content, /^<!DOCTYPE html>/i);
+    assert.match(res.content, /plain answer/);
     assert.equal(lastHeaders.authorization, undefined);
     assert.equal(lastBody.stream, false);
     assert.equal((lastBody.messages as Array<{ content: string }>)[0].content, 'be brief');
@@ -292,7 +304,9 @@ describe('OpenAIChatProvider / AnthropicProvider', () => {
     const deltas: string[] = [];
     const res = await anthropic().explain(request, { signal: new AbortController().signal, onDelta: (t) => deltas.push(t) });
     assert.deepEqual(deltas, ['Hel', 'lo']);
-    assert.equal(res.content, 'Hello');
+    assert.equal(res.format, 'html');
+    assert.match(res.content, /^<!DOCTYPE html>/i);
+    assert.match(res.content, /Hello/);
     assert.equal(lastPath, '/v1/messages');
     assert.equal(lastHeaders['x-api-key'], 'sk-ant-test');
     assert.equal(lastHeaders['anthropic-version'], '2023-06-01');
@@ -306,7 +320,9 @@ describe('OpenAIChatProvider / AnthropicProvider', () => {
   it('Anthropic: parses a JSON message and requires a key', async () => {
     mode = 'anthropic-json';
     const res = await anthropic({ streaming: false }).explain(request, { signal: new AbortController().signal });
-    assert.equal(res.content, 'claude says hi');
+    assert.equal(res.format, 'html');
+    assert.match(res.content, /^<!DOCTYPE html>/i);
+    assert.match(res.content, /claude says hi/);
     await assert.rejects(anthropic({ apiKey: undefined }).explain(request, { signal: new AbortController().signal }), /API key/);
   });
 

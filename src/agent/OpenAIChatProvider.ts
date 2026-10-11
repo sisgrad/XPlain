@@ -5,7 +5,8 @@
  *   - any other server implementing POST {baseUrl}/chat/completions (Ollama, vLLM, LiteLLM, ...)
  */
 import { AgentError, type AgentCallOptions, type AgentProvider, type AgentRequest, type AgentResponse } from './AgentProvider';
-import { buildChatPrompt, detectHtml } from './prompt';
+import { ensureSelfContainedHtml, extractHtmlTitle } from './htmlResult';
+import { buildChatPrompt } from './prompt';
 import { fetchWithTimeout, joinUrl, readSse } from './stream';
 
 export interface OpenAIChatConfig {
@@ -90,7 +91,8 @@ export class OpenAIChatProvider implements AgentProvider {
     });
 
     if (!content.trim()) throw new AgentError(`${this.label}: empty answer.`);
-    return { format: detectHtml(content) ? 'html' : 'markdown', content };
+    const html = ensureSelfContainedHtml(content);
+    return { title: extractHtmlTitle(html), format: 'html', content: html };
   }
 }
 

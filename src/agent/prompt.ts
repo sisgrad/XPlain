@@ -6,6 +6,7 @@
 import type { ExplainLanguage } from '../shared/types';
 import { excalidrawAgentInstructions } from '../skills/excalidrawInstructions';
 import type { AgentItem, AgentRequest } from './AgentProvider';
+import { detectHtml } from './htmlResult';
 
 export type CodeAgentItem = Extract<AgentItem, { type: 'code' }>;
 
@@ -13,13 +14,27 @@ export const DEFAULT_SYSTEM_PROMPT = `You are XPlain, an expert code explainer e
 The user sends one or more focus code blocks (with file paths and line numbers). For each focus block the complete source file may also be included as surrounding context.
 
 Rules:
-- Start your answer with a single Markdown H1 line: a concise, specific title (max 8 words) that summarises this explanation like a chat title. Do not use generic titles.
-- Answer in well-structured Markdown: short sections, bullet points where useful, fenced code blocks with a language tag for code.
+- Reply with ONE self-contained HTML document only. Do not wrap it in Markdown fences. Do not return Markdown as the top-level answer.
+- The document MUST start with <!DOCTYPE html> and include <html>, <head>, and <body>.
+- Put a concise, specific chat-like title (max 8 words) in <title> and as a single <h1> at the start of <body>. Do not use generic titles.
+- Embed all CSS in a <style> block in <head> (dark-friendly, readable typography, styled tables and code blocks). Do not link external stylesheets or scripts.
+- Embed diagrams/images as data: URIs when possible so the file is portable; you may also reference workspace paths you created (e.g. .xplain/diagrams/…).
+- Structure the body with semantic HTML: h2/h3 sections, lists, tables, <pre><code> for code with a language hint in a class when useful.
 - Explain ONLY the focus block(s) (the marked line ranges). Use the full file only as context to understand callers, types, helpers and surrounding code — do not write a line-by-line explanation of the entire file unless the user explicitly asks for that.
 - Refer to code by file and line numbers (e.g. "L192-L221") when it helps.
 - If a template instruction is present, follow it. Treat template files as reference material, not as code to explain unless asked.
 - Be precise and technical; do not pad the answer. If something cannot be determined from the given code, say so.
 - Obey the Language and Diagrams instructions in the user message when present.`;
+
+export const HTML_OUTPUT_INSTRUCTION = [
+  '## Output format (required)',
+  'Return a **single self-contained HTML document** as your entire answer:',
+  '- First characters: `<!DOCTYPE html>` (no preamble, no Markdown wrapping).',
+  '- Include `<title>` (short chat-like title) and inline `<style>` — no external CSS/JS.',
+  '- Body starts with one `<h1>` matching the title.',
+  '- Images/diagrams: prefer `data:` URIs; otherwise link to files you wrote under `.xplain/diagrams/`.',
+  'If you can only produce Markdown, still answer — XPlain will wrap it into HTML — but prefer real HTML.',
+].join('\n');
 
 export interface ChatPrompt {
   system: string;
@@ -33,6 +48,7 @@ export function buildChatPrompt(request: AgentRequest, systemPrompt?: string): C
   const templates = request.items.filter((i): i is Extract<AgentItem, { type: 'template' }> => i.type === 'template');
 
   parts.push(languageInstruction(request.explainLanguage));
+  parts.push(HTML_OUTPUT_INSTRUCTION);
   if (request.useExcalidraw) {
     parts.push(excalidrawAgentInstructions(request.excalidrawSkillPath));
   }
@@ -58,8 +74,8 @@ export function buildChatPrompt(request: AgentRequest, systemPrompt?: string): C
     `## Question\n${
       q ||
       (codes.length
-        ? 'Explain the focus block(s) above: what they do, how they work, and anything non-obvious or risky. Use the full file(s) only as surrounding context.'
-        : 'Please help with the material above.')
+        ? 'Explain the focus block(s) above: what they do, how they work, and anything non-obvious or risky. Use the full file(s) only as surrounding context. Answer as self-contained HTML.'
+        : 'Please help with the material above. Answer as self-contained HTML.')
     }`,
   );
 
@@ -120,7 +136,7 @@ export function languageInstruction(lang: ExplainLanguage | undefined): string {
       '## Language',
       'Write the **entire** explanation in **Russian** (русский язык).',
       'Keep code identifiers, keywords, file paths, and line references (e.g. `L12-L48`) in their original form; do not translate them.',
-      'The H1 title may be in Russian.',
+      'The <title> and <h1> may be in Russian.',
     ].join('\n');
   }
   return [
@@ -131,7 +147,6 @@ export function languageInstruction(lang: ExplainLanguage | undefined): string {
 }
 
 function fence(text: string, lang = ''): string {
-  // Pick a fence longer than any run of backticks inside the text.
   const longest = Math.max(2, ...Array.from(text.matchAll(/`+/g), (m) => m[0].length));
   const ticks = '`'.repeat(longest + 1);
   return `${ticks}${normalizeLang(lang)}\n${text.replace(/\n$/, '')}\n${ticks}`;
@@ -151,8 +166,4 @@ function langFromName(name: string): string {
   return map[ext] ?? '';
 }
 
-/** Heuristic: did a chat model answer with a self-contained HTML document? */
-export function detectHtml(content: string): boolean {
-  const head = content.trimStart().slice(0, 200).toLowerCase();
-  return head.startsWith('<!doctype html') || head.startsWith('<html');
-}
+export { detectHtml };

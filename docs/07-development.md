@@ -79,6 +79,7 @@ media/                иконки
 | --- | --- |
 | `test/anchors.test.ts` | нормализация/хеш, `toLineChange`, сдвиги диапазонов, поиск snippet, валидация хеша |
 | `test/store.test.ts` | создание `.xplain`, переиспользование якорей, сессии ↔ якоря, результаты md/html, reload, шаблоны, фон |
+| `test/html-result.test.ts` | `ensureSelfContainedHtml`: документ / фрагмент / Markdown→HTML |
 | `test/http.test.ts` | Провайдер `xplain`: JSON-ответ, NDJSON-стрим с дельтами, `done.content`, не-JSON тело, HTTP-ошибки, таймаут, отмена |
 | `test/chat-providers.test.ts` | язык ответа / Excalidraw / focus+full-file в `buildChatPrompt`; `hermesHints` (разбор `/api/status`, тексты подсказок, probe); `buildChatPrompt` (порядок секций, ограждения, свой system prompt), `joinUrl`, `detectHtml`; OpenAI/Hermes SSE (keepalive, `hermes.tool.progress`, `[DONE]`), JSON-ответ, ошибки API, `/models`; Anthropic SSE/JSON, заголовки, обязательный ключ, `/v1/models` |
 | `test/misc.test.ts` | `deriveTitle`, `ContextDraft`, `isViewMessage` |
@@ -99,7 +100,7 @@ media/                иконки
 6. Правка выше блока → CodeLens сдвигается; reload окна → якорь найден.
 7. Templates: drop из Explorer и из ОС, сохранение, выбор в Context, передача в запрос.
 8. Фон: выбор файла, drop картинки, настройки opacity/blur/fit, очистка.
-9. HTML-результат (сервер с `format: html`) → iframe в панели, Open in editor.
+9. Ответ всегда `result.html` (iframe в панели, Open in editor); Markdown от агента оборачивается автоматически.
 10. Вкладка Agent: смена провайдера показывает его поля; Save key → индикатор `saved`, ключа нет в
     `settings.json`; выпадающий список Model заполняется с Hermes/Ollama сам (и после Save key), ↻ перезагружает, ✎ — ручной ввод;
     Save в workspace → `.vscode/settings.json`, футер Context обновился; Send через выбранного провайдера.

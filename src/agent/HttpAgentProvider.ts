@@ -11,6 +11,7 @@
  *           When `done` has no `content`, the concatenated deltas are the content.
  */
 import { AgentError, type AgentCallOptions, type AgentProvider, type AgentRequest, type AgentResponse } from './AgentProvider';
+import { ensureSelfContainedHtml, extractHtmlTitle } from './htmlResult';
 import type { ResultFormat } from '../shared/types';
 import { fetchWithTimeout, readLines, readSse } from './stream';
 
@@ -43,9 +44,9 @@ export class HttpAgentProvider implements AgentProvider {
     return timed.run(async (res) => {
       const contentType = res.headers.get('content-type') ?? '';
       if (contentType.includes('ndjson') || contentType.includes('text/event-stream')) {
-        return this.readStream(res, options, contentType.includes('event-stream'));
+        return asHtmlResult(await this.readStream(res, options, contentType.includes('event-stream')));
       }
-      return parseJsonResponse(await res.text());
+      return asHtmlResult(parseJsonResponse(await res.text()));
     });
   }
 
@@ -103,7 +104,7 @@ function parseJsonResponse(text: string): AgentResponse {
   try {
     data = JSON.parse(text);
   } catch {
-    // Be lenient: treat a non-JSON body as markdown.
+    // Be lenient: treat a non-JSON body as markdown/HTML source.
     return { format: 'markdown', content: text };
   }
   if (typeof data !== 'object' || data === null) throw new AgentError('Agent returned an unexpected JSON payload.');
@@ -121,4 +122,10 @@ function parseJsonResponse(text: string): AgentResponse {
   if (content === undefined) throw new AgentError('Agent response has no "content" field.');
   const format: ResultFormat = obj.format === 'html' || typeof obj.html === 'string' ? 'html' : 'markdown';
   return { title: typeof obj.title === 'string' ? obj.title : undefined, format, content };
+}
+
+/** XPlain always stores results as self-contained HTML (converts Markdown when needed). */
+function asHtmlResult(res: AgentResponse): AgentResponse {
+  const html = ensureSelfContainedHtml(res.content, res.title ?? 'XPlain explanation');
+  return { title: res.title ?? extractHtmlTitle(html), format: 'html', content: html };
 }

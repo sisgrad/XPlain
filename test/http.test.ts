@@ -84,7 +84,10 @@ describe('HttpAgentProvider', () => {
   it('posts the request and parses a JSON response', async () => {
     mode = 'json';
     const res = await provider({ apiKey: 'secret' }).explain(request, { signal: new AbortController().signal });
-    assert.deepEqual(res, { title: 'From agent', format: 'markdown', content: '# Hello' });
+    assert.equal(res.format, 'html');
+    assert.equal(res.title, 'From agent');
+    assert.match(res.content, /^<!DOCTYPE html>/i);
+    assert.match(res.content, /Hello/);
     assert.deepEqual(lastBody, request);
     assert.equal(lastHeaders.authorization, 'Bearer secret');
     assert.equal(lastHeaders['x-test'], '1');
@@ -96,19 +99,27 @@ describe('HttpAgentProvider', () => {
     const deltas: string[] = [];
     const res = await provider().explain(request, { signal: new AbortController().signal, onDelta: (t) => deltas.push(t) });
     assert.deepEqual(deltas, ['Hel', 'lo']);
-    assert.deepEqual(res, { title: 'Streamed', format: 'markdown', content: 'Hello' });
+    assert.equal(res.format, 'html');
+    assert.equal(res.title, 'Streamed');
+    assert.match(res.content, /^<!DOCTYPE html>/i);
+    assert.match(res.content, /Hello/);
   });
 
   it('uses content from the done event when present', async () => {
     mode = 'ndjson-content';
     const res = await provider().explain(request, { signal: new AbortController().signal });
-    assert.deepEqual(res, { title: undefined, format: 'html', content: '<h1>x</h1>' });
+    assert.equal(res.format, 'html');
+    assert.equal(res.title, 'x');
+    assert.match(res.content, /^<!DOCTYPE html>/i);
+    assert.match(res.content, /<h1>x<\/h1>/);
   });
 
-  it('treats a non-JSON body as markdown', async () => {
+  it('wraps a non-JSON body into self-contained HTML', async () => {
     mode = 'text';
     const res = await provider().explain(request, { signal: new AbortController().signal });
-    assert.equal(res.content, 'plain markdown');
+    assert.equal(res.format, 'html');
+    assert.match(res.content, /^<!DOCTYPE html>/i);
+    assert.match(res.content, /plain markdown/);
   });
 
   it('reports HTTP errors', async () => {
@@ -128,7 +139,8 @@ describe('HttpAgentProvider', () => {
   it('idle timeout resets on each streamed chunk (total wall time may exceed timeoutMs)', async () => {
     mode = 'ndjson-slow-chunks';
     const res = await provider({ timeoutMs: 150 }).explain(request, { signal: new AbortController().signal });
-    assert.equal(res.content, 'ABC');
+    assert.equal(res.format, 'html');
+    assert.match(res.content, /ABC/);
   });
 
   it('aborts when the body goes idle after headers', async () => {

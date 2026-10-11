@@ -1,5 +1,6 @@
-/** Offline provider used for development and demos: echoes the context as markdown. */
+/** Offline provider used for development and demos: returns a tiny self-contained HTML page. */
 import { AgentError, type AgentCallOptions, type AgentProvider, type AgentRequest, type AgentResponse } from './AgentProvider';
+import { ensureSelfContainedHtml, extractHtmlTitle } from './htmlResult';
 
 export class MockAgentProvider implements AgentProvider {
   readonly id = 'mock';
@@ -15,7 +16,7 @@ export class MockAgentProvider implements AgentProvider {
     const parts: string[] = [];
     parts.push(`# ${title}\n`);
     if (request.question.trim()) parts.push(`> **Question:** ${request.question.trim()}\n`);
-    parts.push(`This is a response from the **mock agent**. Switch \`xplain.agent.provider\` to \`http\` to use your own agent service.\n`);
+    parts.push(`This is a response from the **mock agent**. Switch the Agent tab provider to talk to a real backend.\n`);
     for (const item of request.items) {
       if (item.type === 'code') {
         const lines = item.text.split('\n');
@@ -31,17 +32,16 @@ export class MockAgentProvider implements AgentProvider {
         if (item.files.length) parts.push(`Files: ${item.files.map((f) => `\`${f.name}\``).join(', ')}\n`);
       }
     }
-    parts.push(`\n$$ \\text{softmax}(x)_i = \\frac{e^{x_i}}{\\sum_j e^{x_j}} $$\n`);
-    const content = parts.join('\n');
+    const html = ensureSelfContainedHtml(parts.join('\n'), title.slice(0, 80));
 
-    // Stream word by word to exercise the UI.
-    const words = content.split(/(?<=\s)/);
-    for (const w of words) {
+    // Stream a short preview so the UI still exercises deltas; final result is HTML.
+    const preview = 'Generating self-contained HTML…\n';
+    for (const w of preview.split(/(?<=\s)/)) {
       if (options.signal.aborted) throw new AgentError('Cancelled.');
       options.onDelta?.(w);
       await delay(8);
     }
-    return { title: title.slice(0, 80), format: 'markdown', content };
+    return { title: extractHtmlTitle(html) ?? title.slice(0, 80), format: 'html', content: html };
   }
 }
 
