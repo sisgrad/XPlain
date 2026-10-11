@@ -70,14 +70,36 @@ export function ResultTab({ result, stream, busy }: Props) {
   );
 }
 
-/** Render agent HTML via srcdoc — reliable on Remote-SSH unlike vscode-webview iframe src. */
+/**
+ * Render agent HTML in a closed Shadow DOM (not a nested iframe).
+ * VS Code webviews often block `data:` images inside sandboxed srcdoc iframes
+ * even when parent CSP allows them; shadow roots use the page CSP and show images.
+ */
 function HtmlFrame({ html, title }: { html: string; title: string }) {
-  const ref = useRef<HTMLIFrameElement>(null);
+  const hostRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
-    const frame = ref.current;
-    if (frame) frame.srcdoc = html;
-  }, [html]);
-  return <iframe ref={ref} class="html-result" sandbox="allow-scripts" title={title} />;
+    const host = hostRef.current;
+    if (!host) return;
+    const shadow = host.shadowRoot ?? host.attachShadow({ mode: 'open' });
+    shadow.innerHTML = '';
+    try {
+      const doc = new DOMParser().parseFromString(html, 'text/html');
+      for (const el of Array.from(doc.head?.querySelectorAll('style, link[rel="stylesheet"]') ?? [])) {
+        shadow.appendChild(el.cloneNode(true));
+      }
+      const root = document.createElement('div');
+      root.className = 'xplain-html-root';
+      root.setAttribute('data-title', title);
+      // Prefer body contents; fall back to full markup if the agent omitted <body>.
+      root.innerHTML = doc.body?.innerHTML?.trim() ? doc.body.innerHTML : html;
+      shadow.appendChild(root);
+    } catch {
+      const pre = document.createElement('pre');
+      pre.textContent = html;
+      shadow.appendChild(pre);
+    }
+  }, [html, title]);
+  return <div class="html-result html-result-shadow" ref={hostRef} role="article" aria-label={title} />;
 }
 
 function MarkdownBody({ source }: { source: string }) {

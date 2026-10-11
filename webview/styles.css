@@ -687,6 +687,18 @@ textarea.question {
   border-radius: var(--radius);
 }
 
+.html-result-shadow {
+  overflow: auto;
+  padding: 0;
+}
+
+.html-result-shadow:empty::before {
+  content: 'Rendering…';
+  display: block;
+  padding: 16px;
+  color: var(--vscode-descriptionForeground);
+}
+
 .stream {
   flex: 1 1 auto;
   overflow: auto;

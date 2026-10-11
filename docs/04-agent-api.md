@@ -285,7 +285,7 @@ Upstream-скилл: `skills/excalidraw-diagram/` в расширении
 
 - Ключи API живут в `SecretStorage` VS Code (по одному на провайдера), в настройки и `.xplain/` не
   попадают. Отправляются как `Authorization: Bearer` (Hermes, OpenAI, XPlain) или `x-api-key` (Anthropic).
-- Итоговый ответ всегда HTML в `iframe sandbox="allow-scripts"` без доступа к API VS Code.
+- Итоговый ответ всегда HTML в Shadow DOM панели Result (без nested iframe), без доступа к API VS Code.
   Markdown от агента перед сохранением конвертируется без raw-HTML (`markdown-it` `html: false`).
 - При Remote-SSH запрос уходит с удалённой машины (где работает extension host), а не с клиента —
   учитывайте это при настройке сетевого доступа к агенту (например, `127.0.0.1` означает удалённый хост).

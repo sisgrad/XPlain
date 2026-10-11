@@ -578,10 +578,17 @@ export class XplainController implements vscode.Disposable {
     const result = await store.readResult(sessionId);
     if (!result) return;
     const panel = vscode.window.createWebviewPanel('xplain.result', session.title, vscode.ViewColumn.Beside, {
-      enableScripts: true,
+      enableScripts: false,
       localResourceRoots: [],
     });
-    panel.webview.html = result.content;
+    // Direct webview document (no nested iframe) so data: images obey a permissive CSP.
+    const csp = `default-src 'none'; img-src data: blob: https:; style-src 'unsafe-inline'; font-src data:;`;
+    const body = result.content.includes('<html')
+      ? result.content.replace(/<head([^>]*)>/i, `<head$1><meta http-equiv="Content-Security-Policy" content="${csp}"/>`)
+      : `<!DOCTYPE html><html><head><meta charset="utf-8"/><meta http-equiv="Content-Security-Policy" content="${csp}"/></head><body>${result.content}</body></html>`;
+    panel.webview.html = /http-equiv=["']Content-Security-Policy["']/i.test(result.content)
+      ? result.content
+      : body;
   }
 
   async revealAnchor(anchorId: string): Promise<void> {

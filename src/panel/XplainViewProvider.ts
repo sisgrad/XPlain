@@ -87,11 +87,11 @@ export class XplainViewProvider implements vscode.WebviewViewProvider, vscode.Di
     const codiconUri = webview.asWebviewUri(vscode.Uri.joinPath(dist, 'codicon.css'));
     const csp = [
       `default-src 'none'`,
+      // data:/blob: required for self-contained result.html diagrams (Shadow DOM, not iframe).
       `img-src ${webview.cspSource} https: data: blob:`,
       `style-src ${webview.cspSource} 'unsafe-inline'`,
-      `font-src ${webview.cspSource}`,
+      `font-src ${webview.cspSource} data:`,
       `script-src 'nonce-${nonce}'`,
-      // Result HTML is shown in a sandboxed iframe via srcdoc (and optionally vscode-resource).
       `frame-src 'self' ${webview.cspSource} blob: data:`,
     ].join('; ');
     return `<!DOCTYPE html>

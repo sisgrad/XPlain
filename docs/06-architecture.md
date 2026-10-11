@@ -76,7 +76,7 @@ webview/
   markdown.ts         markdown-it (html:false, linkify) + highlight.js (common + cuda/cpp)
   components/
     ContextTab.tsx    список элементов, шаблон, язык ответа, чекбокс Excalidraw, вопрос (debounce 250 мс), Send/Cancel
-    ResultTab.tsx     рендер Markdown / iframe для HTML / потоковый вывод / переименование
+    ResultTab.tsx     рендер Markdown / Shadow DOM для HTML / потоковый вывод / переименование
     TemplatesTab.tsx  редактор шаблона (имя, инструкция, файлы, drop-zone), список шаблонов
     HistoryTab.tsx    список сессий с фильтром
     AgentTab.tsx      форма провайдера: выбор, поля, выпадающий список моделей (автозагрузка с сервера, ручной ввод как запасной вариант), ключ API, Advanced, Save (global/workspace), Test connection
@@ -134,8 +134,8 @@ webview/
 2. `XplainCodeLensProvider` создаёт CodeLens с командой `xplain.showResults(anchorId)` для якорей с готовыми сессиями.
 3. `showResultsForAnchor` → `createQuickPick` с кнопками (`QuickInputButton`). В pick mode выбор добавляет
    результат в draft и выключает режим; иначе открывает результат в панели.
-4. HTML-результат передаётся в webview целиком (`content`) и показывается в `iframe` через `srcdoc`
-   (`sandbox="allow-scripts"`). Загрузка файла через `asWebviewUri` на Remote-SSH часто даёт пустой кадр.
+4. HTML-результат передаётся в webview целиком (`content`) и рендерится в Shadow DOM панели Result
+   (не iframe): иначе Electron/VS Code часто блокирует `data:`-изображения во вложенном srcdoc.
 
 ## Используемые API VS Code (все стабильные)
 
@@ -153,6 +153,6 @@ Proposed API не используются. Нижняя граница совм
 
 - CSP webview: `default-src 'none'`, скрипты только с nonce, стили/шрифты/картинки из `cspSource`
   (+ `https:`/`data:` для картинок), фреймы только из `cspSource`.
-- Markdown агента рендерится без raw HTML; HTML агента — только в sandboxed iframe.
+- Markdown агента рендерится без raw HTML; HTML агента — в Shadow DOM панели Result (без nested iframe).
 - Файлы шаблонов: ограничение 1 МБ, бинарные отбрасываются, имена санитизируются.
 - Ключ API — только в `SecretStorage`.
