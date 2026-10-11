@@ -7,6 +7,7 @@ import * as vscode from 'vscode';
 import { AgentError, type AgentItem, type AgentRequest } from './agent/AgentProvider';
 import { AgentRegistry, PROVIDER_LABELS } from './agent/AgentRegistry';
 import { inlineLocalAssets } from './agent/inlineAssets';
+import { recoverHtmlAnswer } from './agent/recoverHtml';
 import { deriveTitle } from './agent/titles';
 import { ContextDraft } from './context/ContextDraft';
 import { writeContextPrefs } from './context/ContextPrefs';
@@ -253,7 +254,9 @@ export class XplainController implements vscode.Disposable {
         },
       );
       const content =
-        response.format === 'html' ? await this.makeHtmlSelfContained(response.content) : response.content;
+        response.format === 'html'
+          ? await this.makeHtmlSelfContained(await this.recoverHtmlIfStub(response.content))
+          : response.content;
       const title = deriveTitle({
         agentTitle: response.title,
         question: draft.question,
@@ -467,10 +470,21 @@ export class XplainController implements vscode.Disposable {
     }
     let content = result.content;
     if (result.format === 'html') {
-      const inlined = await this.makeHtmlSelfContained(content);
-      if (inlined !== content) {
+      const recovered = await this.recoverHtmlIfStub(content);
+      const inlined = await this.makeHtmlSelfContained(recovered);
+      if (inlined !== result.content) {
         content = inlined;
-        await store.completeSession(sessionId, { title: session.title, format: 'html', content });
+        const title = deriveTitle({
+          agentTitle: session.title,
+          question: session.question,
+          format: 'html',
+          content,
+          items: [],
+        });
+        await store.completeSession(sessionId, { title: title || session.title, format: 'html', content });
+        session.title = title || session.title;
+      } else {
+        content = inlined;
       }
     }
     await this.d.view.reveal(true);
@@ -483,6 +497,24 @@ export class XplainController implements vscode.Disposable {
       content,
     });
     this.d.view.post({ type: 'tab', tab: 'result' });
+  }
+
+  /** If the agent returned a stub that points at a workspace HTML file, load that file. */
+  private async recoverHtmlIfStub(content: string): Promise<string> {
+    const roots = (vscode.workspace.workspaceFolders ?? []).map((f) => f.uri.fsPath);
+    if (!roots.length) return content;
+    try {
+      const { html, recoveredFrom } = await recoverHtmlAnswer(content, {
+        workspaceRoots: roots,
+        excludeSessions: true,
+        sinceMs: Date.now() - 2 * 60 * 60 * 1000,
+      });
+      if (recoveredFrom) this.d.output.appendLine(`[html] recovered full document from ${recoveredFrom}`);
+      return html;
+    } catch (err) {
+      this.d.output.appendLine(`[html] recover failed: ${err instanceof Error ? err.message : String(err)}`);
+      return content;
+    }
   }
 
   /** Embed local <img>/url(...) assets as data: URIs so result.html needs no sidecar files. */

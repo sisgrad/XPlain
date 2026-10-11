@@ -7,6 +7,7 @@ import * as path from 'node:path';
 import { AgentError, type AgentCallOptions, type AgentProvider, type AgentRequest, type AgentResponse } from './AgentProvider';
 import { ensureSelfContainedHtml, extractHtmlTitle } from './htmlResult';
 import { buildChatPrompt } from './prompt';
+import { recoverHtmlAnswer } from './recoverHtml';
 
 export interface CursorSdkConfig {
   model: string;
@@ -63,10 +64,21 @@ export class CursorSdkProvider implements AgentProvider {
     const sdk = loadSdk();
     ensureStore(sdk, cfg.storeDir);
     const prompt = buildChatPrompt(request, cfg.systemPrompt);
-    const message = `${prompt.system}\n\n---\n\n${prompt.user}`;
+    const message = [
+      prompt.system,
+      '',
+      '---',
+      '',
+      prompt.user,
+      '',
+      '## Cursor / tool-use note',
+      'Your final assistant message must be the complete HTML document text (including data: URIs).',
+      'Do not end with a stub that points at a file path — XPlain cannot use that as the Result panel content.',
+    ].join('\n');
 
     let agent: Awaited<ReturnType<typeof sdk.Agent.create>> | undefined;
     let run: Awaited<ReturnType<NonNullable<typeof agent>['send']>> | undefined;
+    const startedAt = Date.now();
     try {
       agent = await sdk.Agent.create({
         apiKey: cfg.apiKey,
@@ -120,7 +132,13 @@ export class CursorSdkProvider implements AgentProvider {
       }
       const content = (result.result ?? streamed).trim();
       if (!content) throw new AgentError('Cursor SDK: empty answer.');
-      const html = ensureSelfContainedHtml(content);
+      // Cursor agents often Write the real HTML to .xplain/*.html and return a stub.
+      const recovered = await recoverHtmlAnswer(content, {
+        workspaceRoots: [cfg.cwd],
+        sinceMs: startedAt,
+        excludeSessions: true,
+      });
+      const html = ensureSelfContainedHtml(recovered.html);
       return { title: extractHtmlTitle(html), format: 'html', content: html };
     } catch (err) {
       if (err instanceof AgentError) throw err;
