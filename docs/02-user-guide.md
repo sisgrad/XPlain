@@ -10,7 +10,7 @@
 | **Result** | Открытое объяснение (Markdown или HTML); во время запроса — потоковый вывод |
 | **Templates** | Создание и редактирование шаблонов (инструкция + файлы) |
 | **History** | Все сессии проекта с фильтром; открыть, добавить в контекст, удалить |
-| **Agent** | Выбор провайдера (Hermes / Claude / OpenAI-Codex / свой сервис / mock), адреса, модель, ключ API, проверка соединения |
+| **Agent** | Выбор провайдера (Hermes / Claude / OpenAI-Codex / Cursor SDK), адреса, модель, ключ API, проверка соединения |
 
 Числовые бейджи на вкладках показывают количество элементов контекста и готовых результатов.
 
@@ -165,8 +165,8 @@ Pick mode выключается повторным Shift+X, кликом по �
 | **Anthropic (Claude)** | Прямой доступ к Claude | Base URL (`https://api.anthropic.com`), модель (например `claude-sonnet-5`), `max_tokens`, ключ API (обязателен) |
 | **OpenAI / Codex** | OpenAI-модели, в т.ч. Codex, или совместимый сервер (Ollama, vLLM, LiteLLM, OpenRouter) | Base URL (`https://api.openai.com/v1`), модель, ключ API (для локальных серверов не нужен) |
 | **Cursor SDK** | Локальный Cursor-агент через `@cursor/sdk` в текущем workspace | Модель из аккаунта Cursor (напр. `composer-2.5`), API key с [Integrations](https://cursor.com/dashboard/integrations) |
-| **XPlain HTTP agent** | Собственный сервис/мультиагентная система, реализующая [контракт XPlain](04-agent-api.md#контракт-xplain-provider--xplain) | Endpoint (`POST`), ключ API — опционально |
-| **Mock (offline)** | Посмотреть интерфейс без бэкенда | — |
+| **XPlain HTTP agent** | Не в UI; только через `xplain.agent.provider = xplain` — свой сервис по [контракту](04-agent-api.md#контракт-xplain-provider--xplain) | Endpoint (`POST`), ключ — опционально |
+| **Mock (offline)** | Не в UI; только `xplain.agent.provider = mock` для офлайн-проверки | — |
 
 ### Порядок действий
 

@@ -66,7 +66,8 @@ const PROVIDERS: Record<AgentProviderId, ProviderInfo> = {
   },
 };
 
-const ORDER: AgentProviderId[] = ['hermes', 'anthropic', 'openai', 'cursor', 'xplain', 'mock'];
+/** Providers shown in the Agent tab picker. `xplain` / `mock` stay in the backend for settings.json. */
+const UI_PROVIDERS: AgentProviderId[] = ['hermes', 'anthropic', 'openai', 'cursor'];
 
 export function AgentTab({ settings, test, testing, onTestStart, models: modelsResult }: Props) {
   const [form, setForm] = useState<AgentSettings | null>(null);
@@ -89,8 +90,10 @@ export function AgentTab({ settings, test, testing, onTestStart, models: modelsR
     }
   }, [settings]);
 
-  const provider = form?.provider ?? 'xplain';
+  const provider = form?.provider ?? 'hermes';
   const info = PROVIDERS[provider];
+  // If settings still point at a hidden provider, keep it selectable so the user can switch away.
+  const providerOptions = UI_PROVIDERS.includes(provider) ? UI_PROVIDERS : [provider, ...UI_PROVIDERS];
   const hasKey = settings?.hasKey[provider] ?? false;
   const chatBaseUrl = form && isChat(provider) ? form[provider].baseUrl.trim() : '';
   const modelsBaseUrl = provider === 'cursor' ? CURSOR_MODELS_BASE : chatBaseUrl;
@@ -194,9 +197,10 @@ export function AgentTab({ settings, test, testing, onTestStart, models: modelsR
           <span class="codicon codicon-server-process" /> Agent provider
         </h2>
         <select class="select" value={provider} onChange={(e) => update({ provider: (e.target as HTMLSelectElement).value as AgentProviderId })}>
-          {ORDER.map((id) => (
+          {providerOptions.map((id) => (
             <option value={id} key={id}>
               {PROVIDERS[id].label}
+              {!UI_PROVIDERS.includes(id) ? ' (settings only)' : ''}
             </option>
           ))}
         </select>

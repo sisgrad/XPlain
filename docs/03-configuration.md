@@ -9,7 +9,7 @@
 
 | Ключ | Тип / значения | По умолчанию | Описание |
 | --- | --- | --- | --- |
-| `xplain.agent.provider` | `xplain` \| `hermes` \| `openai` \| `anthropic` \| `cursor` \| `mock` | `xplain` | Кто отвечает на запросы. Устаревшее значение `http` читается как `xplain` |
+| `xplain.agent.provider` | `xplain` \| `hermes` \| `openai` \| `anthropic` \| `cursor` \| `mock` | `xplain` | Кто отвечает. В UI вкладки Agent — только hermes/openai/anthropic/cursor; `xplain` и `mock` задаются здесь. Устаревшее `http` → `xplain` |
 | `xplain.agent.endpoint` | string (URL) | `http://127.0.0.1:8765/explain` | [xplain] Адрес, на который отправляется `POST` с контекстом |
 | `xplain.agent.hermes.baseUrl` | string (URL) | `http://127.0.0.1:8642/v1` | [hermes] Base URL API-сервера Hermes (с `/v1`) |
 | `xplain.agent.hermes.model` | string | `hermes-agent` | [hermes] Модель/профиль |

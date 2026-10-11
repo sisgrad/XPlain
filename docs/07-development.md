@@ -35,7 +35,7 @@ Extension Development Host с открытой папкой `debug_samples/`. Т
 2. F5. После правок — **Developer: Reload Window** в окне Development Host (Ctrl+R).
 3. Логи хоста — Output → **XPlain**; ошибки webview — **Developer: Open Webview Developer Tools**.
 
-Для проверки без агента: вкладка Agent → **Mock (offline)** (или `xplain.agent.provider = mock`), либо
+Для проверки без агента: `xplain.agent.provider = mock` в settings (в UI вкладки Agent mock скрыт), либо
 `python3 examples/agent_server.py` с провайдером **XPlain HTTP agent**. Для проверки чат-провайдеров без
 внешних ключей удобен любой OpenAI-совместимый локальный сервер (Ollama, vLLM) через провайдер **OpenAI**.
 
