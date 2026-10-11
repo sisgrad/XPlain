@@ -116,7 +116,10 @@ dashboard с cookie-аутентификацией; XPlain работает с �
   Если видите пустой белый кадр на старой версии — обновите расширение: раньше `asWebviewUri` в
   iframe на Remote-SSH часто не загружался.
 - Файл должен лежать в `.xplain/sessions/<id>/result.html`. Если удалён вручную — «HTML result could not be located on disk».
-- Внешние CDN/картинки внутри HTML ограничены CSP панели и песочницей iframe; надёжнее self-contained HTML (`data:` URI).
+- Картинки должны быть `data:` URI внутри `result.html`. Если агент оставил путь к файлу, XPlain
+  пытается встроить его с диска (workspace / `.xplain/diagrams/`, в т.ч. пути вида `/workspace/...`).
+  Смотрите Output → XPlain: строки `[assets] inlined…` / `could not inline…`.
+- Внешние CDN ограничены CSP панели; для диаграмм используйте локальные PNG + data URI.
 - «Open in editor» открывает HTML в отдельной вкладке без ограничений панели.
 
 ## Drag-and-drop файлов не работает

@@ -80,6 +80,7 @@ media/                иконки
 | `test/anchors.test.ts` | нормализация/хеш, `toLineChange`, сдвиги диапазонов, поиск snippet, валидация хеша |
 | `test/store.test.ts` | создание `.xplain`, переиспользование якорей, сессии ↔ якоря, результаты md/html, reload, шаблоны, фон |
 | `test/html-result.test.ts` | `ensureSelfContainedHtml`: документ / фрагмент / Markdown→HTML |
+| `test/inline-assets.test.ts` | встраивание локальных PNG-путей в `data:` URI |
 | `test/http.test.ts` | Провайдер `xplain`: JSON-ответ, NDJSON-стрим с дельтами, `done.content`, не-JSON тело, HTTP-ошибки, таймаут, отмена |
 | `test/chat-providers.test.ts` | язык ответа / Excalidraw / focus+full-file в `buildChatPrompt`; `hermesHints` (разбор `/api/status`, тексты подсказок, probe); `buildChatPrompt` (порядок секций, ограждения, свой system prompt), `joinUrl`, `detectHtml`; OpenAI/Hermes SSE (keepalive, `hermes.tool.progress`, `[DONE]`), JSON-ответ, ошибки API, `/models`; Anthropic SSE/JSON, заголовки, обязательный ключ, `/v1/models` |
 | `test/misc.test.ts` | `deriveTitle`, `ContextDraft`, `isViewMessage` |

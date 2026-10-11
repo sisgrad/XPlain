@@ -2,9 +2,11 @@
  * Orchestrates everything: commands, webview messages, the draft context,
  * agent calls and result persistence.
  */
+import * as fs from 'node:fs/promises';
 import * as vscode from 'vscode';
 import { AgentError, type AgentItem, type AgentRequest } from './agent/AgentProvider';
 import { AgentRegistry, PROVIDER_LABELS } from './agent/AgentRegistry';
+import { inlineLocalAssets } from './agent/inlineAssets';
 import { deriveTitle } from './agent/titles';
 import { ContextDraft } from './context/ContextDraft';
 import { ensureExcalidrawSkillInstalled, EXCALIDRAW_SKILL_WORKSPACE_PATH } from './skills/excalidraw';
@@ -222,11 +224,13 @@ export class XplainController implements vscode.Disposable {
     this.d.view.post({ type: 'streamStart', sessionId: session.id, title: provisionalTitle });
     this.d.view.post({ type: 'tab', tab: 'result' });
 
+    const folder = vscode.workspace.workspaceFolders?.[0];
     const request: AgentRequest = {
       sessionId: session.id,
       question: draft.question,
       items: agentItems,
-      workspace: vscode.workspace.workspaceFolders?.[0]?.name,
+      workspace: folder?.name,
+      workspaceRoot: folder?.uri.fsPath,
       explainLanguage: draft.explainLanguage,
       useExcalidraw: draft.useExcalidraw,
       excalidrawSkillPath: draft.useExcalidraw ? excalidrawSkillPath ?? EXCALIDRAW_SKILL_WORKSPACE_PATH : undefined,
@@ -247,14 +251,16 @@ export class XplainController implements vscode.Disposable {
           });
         },
       );
+      const content =
+        response.format === 'html' ? await this.makeHtmlSelfContained(response.content) : response.content;
       const title = deriveTitle({
         agentTitle: response.title,
         question: draft.question,
         format: response.format,
-        content: response.content,
+        content,
         items: draft.items,
       });
-      await store.completeSession(session.id, { title, format: response.format, content: response.content });
+      await store.completeSession(session.id, { title, format: response.format, content });
       this.d.view.post({ type: 'streamEnd', sessionId: session.id });
       this.d.draft.clear();
       await this.openResult(session.id);
@@ -458,6 +464,14 @@ export class XplainController implements vscode.Disposable {
       this.d.view.post({ type: 'notice', level: 'warn', message: session.status === 'error' ? `Session failed: ${session.error}` : 'No result stored for this session.' });
       return;
     }
+    let content = result.content;
+    if (result.format === 'html') {
+      const inlined = await this.makeHtmlSelfContained(content);
+      if (inlined !== content) {
+        content = inlined;
+        await store.completeSession(sessionId, { title: session.title, format: 'html', content });
+      }
+    }
     await this.d.view.reveal(true);
     // Pass HTML body for srcdoc rendering. Loading result.html via asWebviewUri inside a
     // sandboxed iframe is unreliable on Remote-SSH (blank white frame).
@@ -465,9 +479,40 @@ export class XplainController implements vscode.Disposable {
       type: 'showResult',
       session,
       format: result.format,
-      content: result.content,
+      content,
     });
     this.d.view.post({ type: 'tab', tab: 'result' });
+  }
+
+  /** Embed local <img>/url(...) assets as data: URIs so result.html needs no sidecar files. */
+  private async makeHtmlSelfContained(html: string): Promise<string> {
+    const roots = (vscode.workspace.workspaceFolders ?? []).map((f) => f.uri.fsPath);
+    if (!roots.length) return html;
+    try {
+      const { html: next, inlined, missing } = await inlineLocalAssets(html, {
+        workspaceRoots: roots,
+        readFile: async (abs) => {
+          try {
+            return new Uint8Array(await fs.readFile(abs));
+          } catch {
+            return undefined;
+          }
+        },
+        listDir: async (abs) => {
+          try {
+            return await fs.readdir(abs);
+          } catch {
+            return [];
+          }
+        },
+      });
+      if (inlined.length) this.d.output.appendLine(`[assets] inlined ${inlined.length} file(s): ${inlined.join(', ')}`);
+      if (missing.length) this.d.output.appendLine(`[assets] could not inline: ${missing.join(', ')}`);
+      return next;
+    } catch (err) {
+      this.d.output.appendLine(`[assets] inline failed: ${err instanceof Error ? err.message : String(err)}`);
+      return html;
+    }
   }
 
   async openResultInEditor(sessionId: string): Promise<void> {

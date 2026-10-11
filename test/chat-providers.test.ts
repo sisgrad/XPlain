@@ -72,11 +72,18 @@ describe('buildChatPrompt', () => {
   });
 
   it('includes Excalidraw skill instructions when useExcalidraw is on', () => {
-    const p = buildChatPrompt({ ...request, useExcalidraw: true, excalidrawSkillPath: '.claude/skills/excalidraw-diagram' });
+    const p = buildChatPrompt({
+      ...request,
+      useExcalidraw: true,
+      excalidrawSkillPath: '.claude/skills/excalidraw-diagram',
+      workspaceRoot: '/hdd/XPlain',
+    });
     assert.match(p.user, /## Diagrams/);
     assert.match(p.user, /Excalidraw Diagram/);
     assert.match(p.user, /\.claude\/skills\/excalidraw-diagram/);
     assert.match(p.user, /coleam00\/excalidraw-diagram-skill/);
+    assert.match(p.user, /data:image\/png;base64/);
+    assert.match(p.user, /\/hdd\/XPlain\/\.xplain\/diagrams/);
     assert.match(p.system, /Language and Diagrams/);
   });
 

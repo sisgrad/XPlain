@@ -30,7 +30,8 @@ architecture, development, troubleshooting) lives in the `docs/` folder of the r
    XPlain installs it into `.claude/skills/` on send).
 3. Press **Send to agent** (or Ctrl+Enter in the question box). Nothing is sent until you confirm.
 4. The answer streams into the **Result** tab and is saved as a self-contained
-   `.xplain/sessions/<id>/result.html` (Markdown answers are wrapped into HTML automatically).
+   `.xplain/sessions/<id>/result.html` (Markdown is wrapped into HTML; local diagram files
+   referenced by path are inlined as `data:` URIs so the file needs no sidecar assets).
 5. Every block that was part of the context gets a CodeLens: `XPlain: <title>` or
    `XPlain: 3 explanations · <latest title>`. Clicking it opens a dropdown of all explanations
    attached to that block; titles are chat-like summaries, not `v1`/`v2`.
