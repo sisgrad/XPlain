@@ -12,8 +12,10 @@
     <sessionId>/
       context.json                # что было отправлено, заголовок, статус, ошибка
       result.html                 # ответ агента (self-contained HTML; старые result.md ещё читаются)
+  diagrams/
+    <sessionId>/                  # PNG / .excalidraw только этой сессии (не шарить между агентами)
   skills/
-    <skillId>/                    # агент-агностичное хранилище скиллов (напр. excalidraw-diagram)
+    <skillId>/                    # агент-агностичное хранилище (+ vendor Excalidraw для offline render)
   templates/
     <templateId>/
       template.json               # имя, инструкция, список файлов
@@ -21,6 +23,9 @@
   ui/
     background.<ext>              # фон панели для проекта (опционально)
 ```
+
+При Send XPlain также поддерживает блок в корневом `.cursorignore` (`# >>> xplain-agent-isolation`),
+чтобы Cursor SDK sandbox не читал чужие `sessions/` / `diagrams/`.
 
 ## `index.json`
 

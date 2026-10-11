@@ -124,6 +124,15 @@ dashboard с cookie-аутентификацией; XPlain работает с �
 - JS Excalidraw для export **завендорен** в скилле (`references/vendor/excalidraw-export.iife.js`) —
   CDN не нужен. Если render падает: проверьте `uv sync` + `uv run playwright install chromium` в
   `references/` у копии скилла (`.xplain/skills/…` или bridge). Не принимайте fallback на чужие PNG.
+- Cursor: смотрите Output → XPlain на `[isolation]`; в корне проекта должен обновляться блок
+  `.cursorignore` между маркерами `xplain-agent-isolation`.
+
+## Extend перезаписал не то / CodeLens пропал
+
+- Extend перезаписывает **ту же** сессию (`result.html`), новый пункт CodeLens не создаётся.
+- Во время Extend статус остаётся `done` — линза не должна исчезать. Если пропала — Reload Window
+  и откройте результат из History.
+- Stop / ошибка Extend оставляют предыдущий HTML на диске.
 
 ## Cursor SDK вернул короткий текст вместо HTML
 

@@ -43,6 +43,30 @@ export const HTML_OUTPUT_INSTRUCTION = [
   'If you can only produce Markdown, still answer — XPlain will wrap it into HTML and inline local image paths.',
 ].join('\n');
 
+/** Forbidden on-disk peeking unless the user attached the artifact in this request. */
+export function artifactAccessInstruction(sessionId: string): string {
+  const id = sessionId.trim() || '<sessionId>';
+  return [
+    '## Artifact access (required)',
+    'Use **only** the materials in this request (code blocks, attached files/templates, and any `Earlier explanation` / result items explicitly included below).',
+    `- You may read/write \`.xplain/diagrams/${id}/\` and skill folders under \`.xplain/skills/\` (and agent skill bridges).`,
+    '- **Do not** open, list, copy, or improve from:',
+    '  - `.xplain/sessions/**` (other explanations on disk — even for the same code block);',
+    '  - `.xplain/diagrams/` root or `.xplain/diagrams/<otherSessionId>/`;',
+    '  - History / CodeLens artifacts that are not present as draft items in this message.',
+    'If a useful prior answer is not included above, do not hunt for it on disk — work from the code and question alone.',
+  ].join('\n');
+}
+
+export function extendModeInstruction(sessionId: string): string {
+  return [
+    '## Extend mode (overwrite)',
+    `You are **revising** an existing XPlain explanation (session \`${sessionId}\`). The prior HTML is included as an earlier explanation item when present.`,
+    'Produce a **full** replacement HTML document (not a short delta). Improve style/content per the new question and any newly attached blocks/files.',
+    `Diagrams for this revise still go under \`.xplain/diagrams/${sessionId}/\` only.`,
+  ].join('\n');
+}
+
 export interface ChatPrompt {
   system: string;
   user: string;
@@ -63,6 +87,8 @@ export function buildSharedInstructions(request: AgentRequest): string {
   }
   parts.push(languageInstruction(request.explainLanguage));
   parts.push(HTML_OUTPUT_INSTRUCTION);
+  parts.push(artifactAccessInstruction(request.sessionId));
+  if (request.extendSessionId) parts.push(extendModeInstruction(request.extendSessionId));
   if (request.useExcalidraw) {
     parts.push(
       excalidrawAgentInstructions({
@@ -93,6 +119,7 @@ export function buildChatPrompt(request: AgentRequest, systemPrompt?: string): C
   const codes = prepared.items.filter((i): i is CodeAgentItem => i.type === 'code');
   const results = prepared.items.filter((i): i is Extract<AgentItem, { type: 'result' }> => i.type === 'result');
   const templates = prepared.items.filter((i): i is Extract<AgentItem, { type: 'template' }> => i.type === 'template');
+  const files = prepared.items.filter((i): i is Extract<AgentItem, { type: 'file' }> => i.type === 'file');
 
   for (const t of templates) {
     parts.push(`## Template: ${t.name}`);
@@ -102,8 +129,13 @@ export function buildChatPrompt(request: AgentRequest, systemPrompt?: string): C
     }
   }
 
+  for (const f of files) {
+    parts.push(`## Attached file: ${f.name}\n${fence(f.content, langFromName(f.name))}`);
+  }
+
   for (const r of results) {
-    parts.push(`## Earlier explanation: ${r.title}\n${r.format === 'html' ? fence(r.content, 'html') : r.content}`);
+    const heading = prepared.extendSessionId ? '## Base explanation to revise' : '## Earlier explanation';
+    parts.push(`${heading}: ${r.title}\n${r.format === 'html' ? fence(r.content, 'html') : r.content}`);
   }
 
   if (codes.length) {
@@ -114,9 +146,11 @@ export function buildChatPrompt(request: AgentRequest, systemPrompt?: string): C
   parts.push(
     `## Question\n${
       q ||
-      (codes.length
-        ? 'Explain the focus block(s) above: what they do, how they work, and anything non-obvious or risky. Use the full file(s) only as surrounding context. Answer as HTML with path-based images.'
-        : 'Please help with the material above. Answer as HTML with path-based images.')
+      (prepared.extendSessionId
+        ? 'Revise the base explanation above using the focus block(s) and attachments. Answer as a full replacement HTML document with path-based images.'
+        : codes.length
+          ? 'Explain the focus block(s) above: what they do, how they work, and anything non-obvious or risky. Use the full file(s) only as surrounding context. Answer as HTML with path-based images.'
+          : 'Please help with the material above. Answer as HTML with path-based images.')
     }`,
   );
 

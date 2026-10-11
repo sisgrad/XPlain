@@ -28,6 +28,11 @@ export type AgentItem =
       name: string;
       instruction: string;
       files: Array<{ name: string; content: string }>;
+    }
+  | {
+      type: 'file';
+      name: string;
+      content: string;
     };
 
 export interface AgentRequest {
@@ -40,6 +45,11 @@ export interface AgentRequest {
   workspaceRoot?: string;
   /** Preferred language for the written explanation. */
   explainLanguage?: ExplainLanguage;
+  /**
+   * When set, this request revises an existing session in place (Extend).
+   * Same id as `sessionId`; diagrams stay under `.xplain/diagrams/<sessionId>/`.
+   */
+  extendSessionId?: string;
   /** When true, the agent must use the Excalidraw Diagram skill. */
   useExcalidraw?: boolean;
   /**

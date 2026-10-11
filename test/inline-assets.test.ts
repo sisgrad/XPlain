@@ -15,8 +15,11 @@ describe('inlineLocalAssets', () => {
 
   before(async () => {
     root = await fs.mkdtemp(path.join(os.tmpdir(), 'xplain-inline-'));
-    await fs.mkdir(path.join(root, '.xplain', 'diagrams'), { recursive: true });
-    await fs.writeFile(path.join(root, '.xplain', 'diagrams', 'walk.png'), TINY_PNG);
+    await fs.mkdir(path.join(root, '.xplain', 'diagrams', 'sess1'), { recursive: true });
+    await fs.mkdir(path.join(root, '.xplain', 'diagrams', 'other'), { recursive: true });
+    await fs.writeFile(path.join(root, '.xplain', 'diagrams', 'walk.png'), TINY_PNG); // legacy root
+    await fs.writeFile(path.join(root, '.xplain', 'diagrams', 'sess1', 'walk.png'), TINY_PNG);
+    await fs.writeFile(path.join(root, '.xplain', 'diagrams', 'other', 'walk.png'), TINY_PNG);
   });
 
   after(async () => {
@@ -47,8 +50,8 @@ describe('inlineLocalAssets', () => {
   });
 
   it('inlines img src path references as data URIs', async () => {
-    const html = `<!DOCTYPE html><html><body><img src="/workspace/.xplain/diagrams/walk.png" alt="d"></body></html>`;
-    const res = await inlineLocalAssets(html, opts());
+    const html = `<!DOCTYPE html><html><body><img src="/workspace/.xplain/diagrams/sess1/walk.png" alt="d"></body></html>`;
+    const res = await inlineLocalAssets(html, { ...opts(), sessionId: 'sess1' });
     assert.equal(res.missing.length, 0);
     assert.equal(res.inlined.length, 1);
     assert.match(res.html, /src="data:image\/png;base64,/);
@@ -56,9 +59,22 @@ describe('inlineLocalAssets', () => {
   });
 
   it('inlines css url() references', async () => {
-    const html = `<style>.x{background:url('.xplain/diagrams/walk.png')}</style>`;
-    const res = await inlineLocalAssets(html, opts());
+    const html = `<style>.x{background:url('.xplain/diagrams/sess1/walk.png')}</style>`;
+    const res = await inlineLocalAssets(html, { ...opts(), sessionId: 'sess1' });
     assert.match(res.html, /url\("data:image\/png;base64,/);
+  });
+
+  it('does not fall back to another session\'s diagram when sessionId is set', async () => {
+    const html = `<img src="walk.png">`;
+    const res = await inlineLocalAssets(html, { ...opts(), sessionId: 'sess1' });
+    assert.equal(res.missing.length, 0);
+    // basename resolves only under sess1/, not other/ or diagrams root
+    assert.match(res.html, /data:image\/png;base64,/);
+    const forbidden = await inlineLocalAssets(`<img src=".xplain/diagrams/other/walk.png">`, {
+      ...opts(),
+      sessionId: 'sess1',
+    });
+    assert.deepEqual(forbidden.missing, ['.xplain/diagrams/other/walk.png']);
   });
 
   it('leaves http(s) and existing data URIs alone', async () => {

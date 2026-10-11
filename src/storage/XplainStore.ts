@@ -11,6 +11,7 @@
  */
 import type {
   Anchor,
+  ContextItem,
   ResultFormat,
   SessionContext,
   SessionMeta,
@@ -245,6 +246,44 @@ export class XplainStore {
     const other: ResultFormat = result.format === 'markdown' ? 'html' : 'markdown';
     if (await this.fs.exists(this.resultPath(sessionId, other))) await this.fs.delete(this.resultPath(sessionId, other));
     await this.patchContext(sessionId, { title: result.title, status: 'done', error: undefined });
+    await this.persistIndex();
+    this.changeEmitter.fire({ kind: 'session', sessionId });
+    this.changeEmitter.fire({ kind: 'index' });
+    return meta;
+  }
+
+  /**
+   * Rewrite session context/question/agent without flipping status away from `done`
+   * (CodeLens only lists done sessions). Used by Extend overwrite.
+   */
+  async replaceSessionContext(
+    sessionId: string,
+    patch: {
+      title?: string;
+      question: string;
+      items: ContextItem[];
+      agent: SessionContext['agent'];
+      anchorIds?: string[];
+    },
+  ): Promise<SessionMeta | undefined> {
+    const meta = this.getSession(sessionId);
+    if (!meta) return undefined;
+    if (patch.title !== undefined) meta.title = patch.title;
+    meta.question = patch.question;
+    if (patch.anchorIds) meta.anchorIds = patch.anchorIds;
+    else {
+      meta.anchorIds = Array.from(
+        new Set(patch.items.flatMap((i) => (i.kind === 'code' ? [i.anchorId] : []))),
+      );
+    }
+    await this.patchContext(sessionId, {
+      title: meta.title,
+      question: patch.question,
+      items: patch.items,
+      agent: patch.agent,
+      status: meta.status,
+      error: meta.error,
+    });
     await this.persistIndex();
     this.changeEmitter.fire({ kind: 'session', sessionId });
     this.changeEmitter.fire({ kind: 'index' });

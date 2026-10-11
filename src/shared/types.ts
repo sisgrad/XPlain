@@ -52,6 +52,12 @@ export type ContextItem =
       title: string;
     }
   | {
+      kind: 'file';
+      name: string;
+      /** Text content only (binary attachments are rejected). */
+      content: string;
+    }
+  | {
       kind: 'template';
       templateId: string;
       name: string;
@@ -113,7 +119,15 @@ export type DraftItem =
       kind: 'result';
       sessionId: string;
       title: string;
+    }
+  | {
+      kind: 'file';
+      name: string;
+      content: string;
     };
+
+/** Max UTF-8 bytes for a draft file attachment (same spirit as template files). */
+export const DRAFT_FILE_MAX_BYTES = 1_048_576;
 
 /** Language the agent should write the explanation in. */
 export type ExplainLanguage = 'en' | 'ru';
@@ -131,6 +145,11 @@ export interface DraftState {
   explainLanguage: ExplainLanguage;
   /** Ask the agent to use the bundled Excalidraw Diagram skill. */
   useExcalidraw: boolean;
+  /**
+   * When set, Send revises this session in place (overwrite result.html) instead of
+   * creating a new session. Used by the Result → Extend flow.
+   */
+  extendSessionId: string | null;
 }
 
 export type BackgroundFit = 'cover' | 'contain' | 'tile';
@@ -156,6 +175,7 @@ export const DEFAULT_DRAFT: DraftState = {
   templateId: null,
   explainLanguage: 'en',
   useExcalidraw: false,
+  extendSessionId: null,
 };
 
 /* ------------------------------------------------------------ agent setup */

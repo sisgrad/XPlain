@@ -95,6 +95,18 @@ describe('ContextDraft', () => {
       { templateId: 't', explainLanguage: 'ru', useExcalidraw: true, question: '' },
     );
   });
+
+  it('tracks extendSessionId and file attachments', () => {
+    const d = new ContextDraft();
+    d.setExtendSessionId('sess-1');
+    assert.equal(d.add({ kind: 'file', name: 'notes.md', content: '# hi' }), true);
+    assert.equal(d.add({ kind: 'file', name: 'notes.md', content: 'dup' }), false);
+    d.clear({ keepExtend: true });
+    assert.equal(d.snapshot.extendSessionId, 'sess-1');
+    assert.equal(d.snapshot.items.length, 0);
+    d.clear();
+    assert.equal(d.snapshot.extendSessionId, null);
+  });
 });
 
 describe('protocol', () => {

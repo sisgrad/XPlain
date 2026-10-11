@@ -140,10 +140,23 @@ describe('buildChatPrompt', () => {
     assert.equal(prepared.systemPrompt, DEFAULT_SYSTEM_PROMPT);
     assert.equal(prepared.instructions, buildSharedInstructions(prepared));
     assert.match(prepared.instructions!, /do \*\*not\*\* emit `data:` URIs or base64/i);
+    assert.match(prepared.instructions!, /## Artifact access/);
+    assert.match(prepared.instructions!, /\.xplain\/sessions\/\*\*/);
     assert.match(prepared.instructions!, /## Diagrams/);
     const chat = buildChatPrompt(prepared);
     assert.equal(chat.system, prepared.systemPrompt);
     assert.ok(chat.user.startsWith(prepared.instructions!));
+  });
+
+  it('includes extend-mode instructions when extendSessionId is set', () => {
+    const prepared = withSharedInstructions({ ...request, extendSessionId: 'sess-9' });
+    assert.match(prepared.instructions!, /## Extend mode/);
+    assert.match(prepared.instructions!, /sess-9/);
+    const chat = buildChatPrompt({
+      ...prepared,
+      items: [{ type: 'result', title: 'Old', format: 'html', content: '<!DOCTYPE html><html></html>' }],
+    });
+    assert.match(chat.user, /Base explanation to revise/);
   });
 
   it('detects HTML documents', () => {

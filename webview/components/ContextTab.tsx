@@ -34,6 +34,11 @@ export function ContextTab({ draft, templates, busy, agentLabel, pickMode, onCon
 
   const canSend = !busy.busy && (draft.items.length > 0 || question.trim().length > 0);
   const template = draft.templateId ? templates.find((t) => t.id === draft.templateId) : undefined;
+  const extending = Boolean(draft.extendSessionId);
+  const baseResult = draft.items.find((i): i is Extract<DraftState['items'][number], { kind: 'result' }> =>
+    i.kind === 'result' && i.sessionId === draft.extendSessionId,
+  );
+  const extendTitle = baseResult?.title ?? 'explanation';
 
   const onKeyDown = (e: KeyboardEvent) => {
     if ((e.ctrlKey || e.metaKey) && e.key === 'Enter' && canSend) {
@@ -46,6 +51,18 @@ export function ContextTab({ draft, templates, busy, agentLabel, pickMode, onCon
 
   return (
     <div class="context-tab">
+      {extending && (
+        <div class="banner pick extend-banner">
+          <span class="codicon codicon-edit" />
+          <span class="grow">
+            Extending <strong>{extendTitle}</strong> — Send will overwrite that result. Agents cannot see other on-disk explanations unless you add them here.
+          </span>
+          <button class="button secondary small" onClick={() => post({ type: 'cancelExtend' })} title="Leave extend mode and clear this draft">
+            Cancel extend
+          </button>
+        </div>
+      )}
+
       <section class="section">
         <div class="section-header">
           <h2>
@@ -53,7 +70,11 @@ export function ContextTab({ draft, templates, busy, agentLabel, pickMode, onCon
             <span class="muted"> · {draft.items.length} item{draft.items.length === 1 ? '' : 's'}</span>
           </h2>
           {draft.items.length > 0 && (
-            <button class="icon-button" title="Clear context" onClick={() => post({ type: 'clearDraft' })}>
+            <button
+              class="icon-button"
+              title={extending ? 'Clear context (keeps extend target until Cancel extend)' : 'Clear context'}
+              onClick={() => post({ type: 'clearDraft' })}
+            >
               <span class="codicon codicon-clear-all" />
             </button>
           )}
@@ -64,13 +85,19 @@ export function ContextTab({ draft, templates, busy, agentLabel, pickMode, onCon
               Select code in the editor and press <kbd>Shift</kbd>+<kbd>X</kbd> to add it here. Each selection becomes a block <code>L12-L48</code>; sub-ranges are tracked separately.
             </p>
             <p>
-              To reuse an earlier explanation, leave the editor, press <kbd>Shift</kbd>+<kbd>X</kbd> {pickMode ? '(pick mode is on)' : 'to arm pick mode'}, then click the block's <em>XPlain</em> CodeLens.
+              Drop text files here to attach them. To reuse an earlier explanation, leave the editor, press <kbd>Shift</kbd>+<kbd>X</kbd>{' '}
+              {pickMode ? '(pick mode is on)' : 'to arm pick mode'}, then click the block's <em>XPlain</em> CodeLens — or use <strong>Extend</strong> on the Result tab.
             </p>
           </div>
         ) : (
           <ul class="items">
             {draft.items.map((item, index) => (
-              <li class="item" key={item.kind === 'code' ? item.anchorId : item.sessionId}>
+              <li
+                class="item"
+                key={
+                  item.kind === 'code' ? item.anchorId : item.kind === 'result' ? item.sessionId : `file:${item.name}:${index}`
+                }
+              >
                 {item.kind === 'code' ? (
                   <>
                     <span class="codicon codicon-symbol-file item-icon" />
@@ -81,13 +108,23 @@ export function ContextTab({ draft, templates, busy, agentLabel, pickMode, onCon
                       <span class="item-sub">{item.file} · {item.language} · {item.text.split('\n').length} lines</span>
                     </button>
                   </>
-                ) : (
+                ) : item.kind === 'result' ? (
                   <>
                     <span class="codicon codicon-comment-discussion item-icon" />
                     <button class="link item-main" title="Open explanation" onClick={() => post({ type: 'openSession', sessionId: item.sessionId })}>
                       <span class="item-title">{item.title}</span>
-                      <span class="item-sub">previous explanation</span>
+                      <span class="item-sub">
+                        {item.sessionId === draft.extendSessionId ? 'base explanation (will be overwritten)' : 'previous explanation'}
+                      </span>
                     </button>
+                  </>
+                ) : (
+                  <>
+                    <span class="codicon codicon-file-text item-icon" />
+                    <div class="item-main">
+                      <span class="item-title">{item.name}</span>
+                      <span class="item-sub">attached file · {item.content.split('\n').length} lines</span>
+                    </div>
                   </>
                 )}
                 <div class="item-actions">
@@ -176,11 +213,15 @@ export function ContextTab({ draft, templates, busy, agentLabel, pickMode, onCon
 
       <section class="section grow">
         <h2>
-          <span class="codicon codicon-question" /> Your question <span class="muted">· optional</span>
+          <span class="codicon codicon-question" /> {extending ? 'Follow-up question' : 'Your question'} <span class="muted">· optional</span>
         </h2>
         <textarea
           class="question"
-          placeholder="What do you want to know about this code? (Ctrl+Enter to send)"
+          placeholder={
+            extending
+              ? 'What should change in this explanation? (Ctrl+Enter to overwrite)'
+              : 'What do you want to know about this code? (Ctrl+Enter to send)'
+          }
           value={question}
           onInput={(e) => setQuestion((e.target as HTMLTextAreaElement).value)}
           onKeyDown={onKeyDown}
@@ -199,8 +240,13 @@ export function ContextTab({ draft, templates, busy, agentLabel, pickMode, onCon
             <span class="codicon codicon-debug-stop" /> Stop request
           </button>
         ) : (
-          <button class="button primary" disabled={!canSend} onClick={() => post({ type: 'send' })} title="Send the context to the agent (Ctrl+Enter)">
-            <span class="codicon codicon-send" /> Send to agent
+          <button
+            class="button primary"
+            disabled={!canSend}
+            onClick={() => post({ type: 'send' })}
+            title={extending ? 'Overwrite the extended explanation (Ctrl+Enter)' : 'Send the context to the agent (Ctrl+Enter)'}
+          >
+            <span class="codicon codicon-send" /> {extending ? 'Send (overwrite)' : 'Send to agent'}
           </button>
         )}
       </footer>

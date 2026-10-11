@@ -217,30 +217,33 @@ export function App() {
     const images = files.filter((f) => f.type.startsWith('image/'));
     const others = files.filter((f) => !f.type.startsWith('image/'));
 
-    // Images dropped anywhere become the panel background.
-    if (images.length && others.length === 0 && tab !== 'templates') {
+    // Images alone (outside Context/Templates) become the panel background.
+    if (images.length && others.length === 0 && tab !== 'templates' && tab !== 'context') {
       const img = images[0];
       const dataBase64 = await readAsBase64(img);
       post({ type: 'dropBackground', name: img.name, dataBase64 });
       return;
     }
-    // Everything else is attached to the template being edited.
     const textFiles: TemplateFile[] = [];
     for (const f of files) {
+      if (f.type.startsWith('image/') && tab !== 'templates' && tab !== 'context') continue;
       if (f.size > 1024 * 1024) {
         showNotice({ level: 'warn', message: `Skipped ${f.name}: larger than 1 MB.` });
         continue;
       }
       textFiles.push({ name: f.name, content: await f.text() });
     }
-    if (textFiles.length) appendTemplateFiles(textFiles);
+    if (textFiles.length) {
+      if (tab === 'context') post({ type: 'addDraftFiles', files: textFiles });
+      else appendTemplateFiles(textFiles);
+    }
     const uriList = dt.getData('text/uri-list');
     if (uriList) {
       const uris = uriList
         .split(/\r?\n/)
         .map((l) => l.trim())
         .filter((l) => l && !l.startsWith('#'));
-      if (uris.length) post({ type: 'readUris', uris });
+      if (uris.length) post({ type: 'readUris', uris, destination: tab === 'context' ? 'draft' : 'template' });
     }
   };
 
@@ -312,7 +315,13 @@ export function App() {
       {dragOver && (
         <div class="drop-overlay">
           <span class="codicon codicon-cloud-upload" />
-          <div>{tab === 'templates' ? 'Drop files to attach them to the template' : 'Drop an image for the background, or files for a template'}</div>
+          <div>
+            {tab === 'context'
+              ? 'Drop text files to attach them to the context'
+              : tab === 'templates'
+                ? 'Drop files to attach them to the template'
+                : 'Drop an image for the background, or files for a template'}
+          </div>
         </div>
       )}
     </div>

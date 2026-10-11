@@ -5,6 +5,7 @@
 import * as fs from 'node:fs/promises';
 import * as vscode from 'vscode';
 import { AgentError, type AgentItem, type AgentRequest } from './agent/AgentProvider';
+import { applyCursorIsolation, clearCursorSessionAllow } from './agent/cursorIsolation';
 import { withSharedInstructions } from './agent/prompt';
 import { AgentRegistry, PROVIDER_LABELS } from './agent/AgentRegistry';
 import { inlineLocalAssets } from './agent/inlineAssets';
@@ -20,7 +21,18 @@ import { PickMode } from './editor/pickMode';
 import { BackgroundManager } from './panel/background';
 import type { XplainViewProvider } from './panel/XplainViewProvider';
 import type { InitState, ViewMessage } from './shared/protocol';
-import { AGENT_PROVIDER_IDS, type AgentProviderId, type AgentSettings, type BusyState, type ContextItem, type DraftItem, type DraftState, type SessionMeta, type TemplateFile } from './shared/types';
+import {
+  AGENT_PROVIDER_IDS,
+  DRAFT_FILE_MAX_BYTES,
+  type AgentProviderId,
+  type AgentSettings,
+  type BusyState,
+  type ContextItem,
+  type DraftItem,
+  type DraftState,
+  type SessionMeta,
+  type TemplateFile,
+} from './shared/types';
 import type { XplainStore } from './storage/XplainStore';
 import type { VscodeStoreFs } from './storage/vscodeFs';
 
@@ -40,7 +52,7 @@ interface Deps {
 
 export class XplainController implements vscode.Disposable {
   private readonly disposables: vscode.Disposable[] = [];
-  private current: { sessionId: string; abort: AbortController } | undefined;
+  private current: { sessionId: string; abort: AbortController; extending: boolean } | undefined;
   private readonly agents: AgentRegistry;
 
   constructor(private readonly d: Deps) {
@@ -181,6 +193,79 @@ export class XplainController implements vscode.Disposable {
     );
   }
 
+  /** Seed Context from an open result so Send overwrites that session. */
+  async beginExtend(sessionId: string): Promise<void> {
+    const store = this.d.store;
+    if (!store) return this.noWorkspace();
+    const meta = store.getSession(sessionId);
+    if (!meta || meta.status !== 'done') {
+      this.d.view.post({ type: 'notice', level: 'warn', message: 'Only a completed explanation can be extended.' });
+      return;
+    }
+    const ctx = await store.readSessionContext(sessionId);
+    this.d.draft.clear();
+    this.d.draft.setExtendSessionId(sessionId);
+    this.d.draft.add({ kind: 'result', sessionId, title: meta.title });
+    for (const item of ctx?.items ?? []) {
+      if (item.kind !== 'code') continue;
+      const live = this.d.live?.currentRange(item.anchorId);
+      const startLine = live?.startLine ?? item.startLine;
+      const endLine = live?.endLine ?? item.endLine;
+      let text = item.text;
+      const doc = vscode.workspace.textDocuments.find((d) => LiveAnchors.relPath(d.uri) === item.file);
+      if (doc && live) {
+        const slice = doc.getText(toRange(doc, startLine, endLine));
+        if (slice.trim()) text = slice;
+      }
+      this.d.draft.add({
+        kind: 'code',
+        anchorId: item.anchorId,
+        file: item.file,
+        startLine,
+        endLine,
+        language: item.language,
+        text,
+      });
+    }
+    this.d.pickMode.set(false);
+    await this.d.view.reveal(true);
+    this.d.view.post({ type: 'tab', tab: 'context' });
+    this.d.view.post({
+      type: 'notice',
+      level: 'info',
+      message: `Extending "${meta.title}". Add a follow-up question, files, or more blocks, then Send (overwrite).`,
+    });
+  }
+
+  cancelExtend(): void {
+    if (!this.d.draft.snapshot.extendSessionId) return;
+    this.d.draft.clear();
+    this.d.view.post({ type: 'notice', level: 'info', message: 'Extend cancelled.' });
+  }
+
+  addDraftFiles(files: Array<{ name: string; content: string }>): void {
+    let added = 0;
+    for (const f of files) {
+      const name = sanitizeDraftFileName(f.name);
+      if (!name) continue;
+      const bytes = Buffer.byteLength(f.content, 'utf8');
+      if (bytes > DRAFT_FILE_MAX_BYTES) {
+        this.d.view.post({
+          type: 'notice',
+          level: 'warn',
+          message: `Skipped ${name}: larger than ${DRAFT_FILE_MAX_BYTES / 1024} KB.`,
+        });
+        continue;
+      }
+      if (this.d.draft.add({ kind: 'file', name, content: f.content })) added += 1;
+    }
+    if (added) {
+      void this.d.view.reveal(true);
+      this.d.view.post({ type: 'tab', tab: 'context' });
+      vscode.window.setStatusBarMessage(`$(check) XPlain: added ${added} file(s) to context`, 2500);
+    }
+  }
+
   /* ------------------------------------------------------------- send (5) */
 
   async send(): Promise<void> {
@@ -193,6 +278,12 @@ export class XplainController implements vscode.Disposable {
     const draft = this.d.draft.snapshot;
     if (draft.items.length === 0 && !draft.question.trim()) {
       this.d.view.post({ type: 'notice', level: 'warn', message: 'Add a code block (Shift+X) or type a question first.' });
+      return;
+    }
+
+    const extending = Boolean(draft.extendSessionId);
+    if (extending && (!draft.extendSessionId || !store.getSession(draft.extendSessionId))) {
+      this.d.view.post({ type: 'notice', level: 'warn', message: 'Extend target session is missing. Cancel Extend and try again.' });
       return;
     }
 
@@ -223,29 +314,51 @@ export class XplainController implements vscode.Disposable {
     }
 
     const provisionalTitle = deriveTitle({ question: draft.question, format: 'markdown', content: '', items: draft.items });
-    const session = await store.createSession({
-      title: provisionalTitle,
-      question: draft.question,
-      items,
-      agent: { provider: provider.id, endpoint: agentEndpoint(settings), model: agentModel(settings) },
-    });
+    const agentMeta = { provider: provider.id, endpoint: agentEndpoint(settings), model: agentModel(settings) };
+    let sessionId: string;
+    if (extending && draft.extendSessionId) {
+      sessionId = draft.extendSessionId;
+      const existing = store.getSession(sessionId)!;
+      await store.replaceSessionContext(sessionId, {
+        title: provisionalTitle || existing.title,
+        question: draft.question,
+        items,
+        agent: agentMeta,
+      });
+    } else {
+      const session = await store.createSession({
+        title: provisionalTitle,
+        question: draft.question,
+        items,
+        agent: agentMeta,
+      });
+      sessionId = session.id;
+    }
 
     const abort = new AbortController();
-    this.current = { sessionId: session.id, abort };
-    this.setBusy({ busy: true, label: `Asking ${provider.label}…`, sessionId: session.id });
-    this.d.view.post({ type: 'streamStart', sessionId: session.id, title: provisionalTitle });
+    this.current = { sessionId, abort, extending };
+    this.setBusy({
+      busy: true,
+      label: extending ? `Extending via ${provider.label}…` : `Asking ${provider.label}…`,
+      sessionId,
+    });
+    this.d.view.post({
+      type: 'streamStart',
+      sessionId,
+      title: provisionalTitle || store.getSession(sessionId)?.title || 'Explanation',
+    });
     this.d.view.post({ type: 'tab', tab: 'result' });
 
     const folder = vscode.workspace.workspaceFolders?.[0];
-    // One shared systemPrompt + instructions string for every provider (chat, Cursor, HTTP).
     const request: AgentRequest = withSharedInstructions(
       {
-        sessionId: session.id,
+        sessionId,
         question: draft.question,
         items: agentItems,
         workspace: folder?.name,
         workspaceRoot: folder?.uri.fsPath,
         explainLanguage: draft.explainLanguage,
+        extendSessionId: extending ? sessionId : undefined,
         useExcalidraw: draft.useExcalidraw,
         excalidrawSkillPath: draft.useExcalidraw ? excalidrawSkillPath ?? EXCALIDRAW_SKILL_CANONICAL_PATH : undefined,
         excalidrawSkillCanonicalPath: draft.useExcalidraw
@@ -256,24 +369,34 @@ export class XplainController implements vscode.Disposable {
       settings.systemPrompt,
     );
     this.d.output.appendLine(
-      `[send] session ${session.id} via ${provider.id}: ${agentItems.length} item(s), lang=${draft.explainLanguage}` +
-        (draft.useExcalidraw ? ', excalidraw=on' : ''),
+      `[send] session ${sessionId} via ${provider.id}: ${agentItems.length} item(s), lang=${draft.explainLanguage}` +
+        (draft.useExcalidraw ? ', excalidraw=on' : '') +
+        (extending ? ', extend=overwrite' : ''),
     );
 
     try {
+      if (folder?.uri.fsPath) {
+        try {
+          await applyCursorIsolation(folder.uri.fsPath, sessionId);
+        } catch (err) {
+          this.d.output.appendLine(
+            `[isolation] .cursorignore update failed: ${err instanceof Error ? err.message : String(err)}`,
+          );
+        }
+      }
       const response = await vscode.window.withProgress(
-        { location: vscode.ProgressLocation.Window, title: 'XPlain: waiting for agent', cancellable: true },
+        { location: vscode.ProgressLocation.Window, title: extending ? 'XPlain: extending explanation' : 'XPlain: waiting for agent', cancellable: true },
         (progress, token) => {
           token.onCancellationRequested(() => this.cancel());
           return provider.explain(request, {
             signal: abort.signal,
-            onDelta: (text) => this.d.view.post({ type: 'streamDelta', sessionId: session.id, text }),
+            onDelta: (text) => this.d.view.post({ type: 'streamDelta', sessionId, text }),
           });
         },
       );
       const content =
         response.format === 'html'
-          ? await this.makeHtmlSelfContained(await this.recoverHtmlIfStub(response.content))
+          ? await this.makeHtmlSelfContained(await this.recoverHtmlIfStub(response.content), sessionId)
           : response.content;
       const title = deriveTitle({
         agentTitle: response.title,
@@ -282,23 +405,48 @@ export class XplainController implements vscode.Disposable {
         content,
         items: draft.items,
       });
-      await store.completeSession(session.id, { title, format: response.format, content });
-      this.d.view.post({ type: 'streamEnd', sessionId: session.id });
+      await store.completeSession(sessionId, { title, format: response.format, content });
+      if (extending) {
+        await store.replaceSessionContext(sessionId, {
+          title,
+          question: draft.question,
+          items,
+          agent: agentMeta,
+        });
+      }
+      this.d.view.post({ type: 'streamEnd', sessionId });
       this.d.draft.clear();
-      await this.openResult(session.id);
+      await this.openResult(sessionId);
     } catch (err) {
       const message = err instanceof AgentError || err instanceof Error ? err.message : String(err);
-      this.d.output.appendLine(`[error] session ${session.id}: ${message}`);
-      this.d.view.post({ type: 'streamEnd', sessionId: session.id });
+      this.d.output.appendLine(`[error] session ${sessionId}: ${message}`);
+      this.d.view.post({ type: 'streamEnd', sessionId });
       if (abort.signal.aborted) {
-        await store.deleteSession(session.id);
-        this.d.view.post({ type: 'notice', level: 'info', message: 'Request stopped.' });
+        if (!extending) await store.deleteSession(sessionId);
+        this.d.view.post({
+          type: 'notice',
+          level: 'info',
+          message: extending ? 'Extend stopped — previous result kept.' : 'Request stopped.',
+        });
+      } else if (extending) {
+        // Keep prior result.html and done status for CodeLens.
+        this.d.view.post({ type: 'notice', level: 'error', message: `Extend failed: ${message}` });
       } else {
-        await store.failSession(session.id, message);
+        await store.failSession(sessionId, message);
         this.d.view.post({ type: 'notice', level: 'error', message });
       }
       this.d.view.post({ type: 'tab', tab: 'context' });
     } finally {
+      const root = folder?.uri.fsPath;
+      if (root) {
+        try {
+          await clearCursorSessionAllow(root);
+        } catch (err) {
+          this.d.output.appendLine(
+            `[isolation] clear failed: ${err instanceof Error ? err.message : String(err)}`,
+          );
+        }
+      }
       this.current = undefined;
       this.setBusy({ busy: false });
     }
@@ -322,7 +470,12 @@ export class XplainController implements vscode.Disposable {
   }
 
   private async buildContextItems(draft: DraftState): Promise<ContextItem[]> {
-    const out: ContextItem[] = draft.items.map((i) => ({ ...i }));
+    const out: ContextItem[] = [];
+    for (const i of draft.items) {
+      if (i.kind === 'code') out.push({ ...i });
+      else if (i.kind === 'result') out.push({ ...i });
+      else out.push({ kind: 'file', name: i.name, content: i.content });
+    }
     if (draft.templateId) {
       const t = this.d.store?.getTemplate(draft.templateId);
       if (t) out.push({ kind: 'template', templateId: t.id, name: t.name });
@@ -347,9 +500,11 @@ export class XplainController implements vscode.Disposable {
           text: await this.freshText(item),
           ...(fileText !== undefined ? { fileText } : {}),
         });
-      } else {
+      } else if (item.kind === 'result') {
         const res = await store.readResult(item.sessionId);
         if (res) out.push({ type: 'result', title: item.title, format: res.format, content: res.content });
+      } else {
+        out.push({ type: 'file', name: item.name, content: item.content });
       }
     }
     if (draft.templateId) {
@@ -489,7 +644,7 @@ export class XplainController implements vscode.Disposable {
     let content = result.content;
     if (result.format === 'html') {
       const recovered = await this.recoverHtmlIfStub(content);
-      const inlined = await this.makeHtmlSelfContained(recovered);
+      const inlined = await this.makeHtmlSelfContained(recovered, sessionId);
       if (inlined !== result.content) {
         content = inlined;
         const title = deriveTitle({
@@ -536,12 +691,13 @@ export class XplainController implements vscode.Disposable {
   }
 
   /** Embed local <img>/url(...) assets as data: URIs so result.html needs no sidecar files. */
-  private async makeHtmlSelfContained(html: string): Promise<string> {
+  private async makeHtmlSelfContained(html: string, sessionId?: string): Promise<string> {
     const roots = (vscode.workspace.workspaceFolders ?? []).map((f) => f.uri.fsPath);
     if (!roots.length) return html;
     try {
       const { html: next, inlined, missing } = await inlineLocalAssets(html, {
         workspaceRoots: roots,
+        sessionId,
         readFile: async (abs) => {
           try {
             return new Uint8Array(await fs.readFile(abs));
@@ -668,14 +824,31 @@ export class XplainController implements vscode.Disposable {
         case 'moveItem':
           this.d.draft.move(m.from, m.to);
           break;
-        case 'clearDraft':
-          this.d.draft.clear();
+        case 'clearDraft': {
+          const extendId = this.d.draft.snapshot.extendSessionId;
+          if (extendId) {
+            const meta = store?.getSession(extendId);
+            this.d.draft.clear({ keepExtend: true });
+            if (meta) this.d.draft.add({ kind: 'result', sessionId: extendId, title: meta.title });
+          } else {
+            this.d.draft.clear();
+          }
           break;
+        }
         case 'send':
           await this.send();
           break;
         case 'cancel':
           this.cancel();
+          break;
+        case 'beginExtend':
+          await this.beginExtend(m.sessionId);
+          break;
+        case 'cancelExtend':
+          this.cancelExtend();
+          break;
+        case 'addDraftFiles':
+          this.addDraftFiles(m.files);
           break;
         case 'openSession':
           await this.openResult(m.sessionId);
@@ -731,7 +904,10 @@ export class XplainController implements vscode.Disposable {
         }
         case 'readUris': {
           const uris = m.uris.map((u) => safeParseUri(u)).filter((u): u is vscode.Uri => Boolean(u));
-          if (uris.length) this.d.view.post({ type: 'templateFiles', files: await this.readFiles(uris) });
+          if (!uris.length) break;
+          const files = await this.readFiles(uris);
+          if (m.destination === 'draft') this.addDraftFiles(files);
+          else this.d.view.post({ type: 'templateFiles', files });
           break;
         }
         case 'chooseBackground':
@@ -888,6 +1064,11 @@ function safeParseUri(s: string): vscode.Uri | undefined {
 function firstLine(text: string): string {
   const l = text.split('\n').find((x) => x.trim()) ?? '';
   return l.length > 120 ? `${l.slice(0, 119)}…` : l;
+}
+
+function sanitizeDraftFileName(name: string): string {
+  const base = name.replace(/\\/g, '/').split('/').pop() ?? '';
+  return base.replace(/[^\w.\- ()[\]]+/g, '_').slice(0, 180);
 }
 
 function relativeTime(iso: string): string {

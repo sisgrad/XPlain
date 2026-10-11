@@ -43,6 +43,15 @@ export function ResultTab({ result, stream, busy }: Props) {
       <div class="result-header">
         <EditableTitle sessionId={result.session.id} title={result.session.title} />
         <div class="result-actions">
+          {result.session.status === 'done' && (
+            <button
+              class="button secondary small"
+              title="Revise this explanation: add a follow-up question, files, or more code, then overwrite"
+              onClick={() => post({ type: 'beginExtend', sessionId: result.session.id })}
+            >
+              <span class="codicon codicon-edit" /> Extend
+            </button>
+          )}
           <button class="icon-button" title="Add this explanation to the context" onClick={() => post({ type: 'addSessionToDraft', sessionId: result.session.id })}>
             <span class="codicon codicon-add" />
           </button>

@@ -82,6 +82,34 @@ describe('XplainStore', () => {
     assert.equal(store.getAnchor(a2.id), undefined);
   });
 
+  it('replaceSessionContext overwrites context without dropping done status', async () => {
+    const a = await store.upsertAnchor({ file: 'f.cu', startLine: 1, endLine: 2, text: 'x\ny', language: 'cuda' });
+    const s = await store.createSession({
+      title: 'Old',
+      question: 'q1',
+      items: [{ kind: 'code', anchorId: a.id, file: 'f.cu', startLine: 1, endLine: 2, language: 'cuda', text: 'x\ny' }],
+      agent: { provider: 'mock' },
+    });
+    await store.completeSession(s.id, { title: 'Old', format: 'html', content: '<h1>Old</h1>' });
+    await store.replaceSessionContext(s.id, {
+      title: 'Revised',
+      question: 'q2',
+      items: [
+        { kind: 'result', sessionId: s.id, title: 'Old' },
+        { kind: 'file', name: 'n.md', content: 'note' },
+      ],
+      agent: { provider: 'cursor', model: 'composer-2.5' },
+    });
+    const meta = store.getSession(s.id)!;
+    assert.equal(meta.status, 'done');
+    assert.equal(meta.question, 'q2');
+    assert.equal(meta.title, 'Revised');
+    const ctx = await store.readSessionContext(s.id);
+    assert.equal(ctx?.agent.provider, 'cursor');
+    assert.ok(ctx?.items.some((i) => i.kind === 'file'));
+    assert.equal((await store.readResult(s.id))?.content, '<h1>Old</h1>');
+  });
+
   it('survives a reload from disk', async () => {
     const a = await store.upsertAnchor({ file: 'a.cu', startLine: 1, endLine: 1, text: 'a', language: 'cuda' });
     const s = await store.createSession({ title: 't', question: 'q', items: [], agent: { provider: 'mock' } });

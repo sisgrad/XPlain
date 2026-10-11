@@ -13,19 +13,18 @@ export class ContextDraft {
   }
 
   get isEmpty(): boolean {
-    // Template / language / diagrams are prefs, not draft content.
+    // Template / language / diagrams / extend target are prefs, not draft content.
     return this.state.items.length === 0 && this.state.question.trim() === '';
   }
 
-  /** Adds an item; identical code blocks / results are not duplicated. */
+  /** Adds an item; identical code blocks / results / file names are not duplicated. */
   add(item: DraftItem): boolean {
-    const dup = this.state.items.some((i) =>
-      i.kind === 'code' && item.kind === 'code'
-        ? i.anchorId === item.anchorId
-        : i.kind === 'result' && item.kind === 'result'
-          ? i.sessionId === item.sessionId
-          : false,
-    );
+    const dup = this.state.items.some((i) => {
+      if (i.kind === 'code' && item.kind === 'code') return i.anchorId === item.anchorId;
+      if (i.kind === 'result' && item.kind === 'result') return i.sessionId === item.sessionId;
+      if (i.kind === 'file' && item.kind === 'file') return i.name === item.name;
+      return false;
+    });
     if (dup) return false;
     this.state.items.push(item);
     this.fire();
@@ -70,6 +69,12 @@ export class ContextDraft {
     this.fire();
   }
 
+  setExtendSessionId(sessionId: string | null): void {
+    if (this.state.extendSessionId === sessionId) return;
+    this.state.extendSessionId = sessionId;
+    this.fire();
+  }
+
   /** Update ranges of code items when anchors move. */
   updateCodeRanges(update: (anchorId: string) => { startLine: number; endLine: number } | undefined): void {
     let changed = false;
@@ -85,7 +90,7 @@ export class ContextDraft {
     if (changed) this.fire();
   }
 
-  clear(options: { keepQuestion?: boolean } = {}): void {
+  clear(options: { keepQuestion?: boolean; keepExtend?: boolean } = {}): void {
     // Keep template / language / diagram preferences — they are UI choices, not one-shot context.
     this.state = {
       items: [],
@@ -93,6 +98,7 @@ export class ContextDraft {
       templateId: this.state.templateId,
       explainLanguage: this.state.explainLanguage,
       useExcalidraw: this.state.useExcalidraw,
+      extendSessionId: options.keepExtend ? this.state.extendSessionId : null,
     };
     this.fire();
   }

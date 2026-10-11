@@ -118,16 +118,16 @@ webview/
 3. `draft.onDidChange` → `view.post({type:'draft'})`; декорации подсвечивают блок; панель открывается с
    `preserveFocus`.
 
-### Отправка
+### Отправка и Extend
 
-1. `send` → проверка, что нет активного запроса → `store.createSession` (status `pending`, предварительный заголовок).
-2. Формирование `AgentItem[]`: для блоков — свежий текст фокус-диапазона и полный `fileText` файла
-   (кэш по пути; пропуск если файл > 512 КБ); для результатов — `result.*`; для шаблона — инструкция + файлы.
-3. `AgentRegistry.read()` → `AgentRegistry.provider(settings)` строит провайдера по `xplain.agent.provider`;
-   `provider.explain(request, {signal, onDelta})` под `window.withProgress`; дельты транслируются в webview.
-   Для чат-провайдеров `buildChatPrompt` собирает system+user: фокус-блоки отдельно, полные файлы как context only.
-4. Успех → `deriveTitle` → `store.completeSession` → `draft.clear()` → `openResult`.
-   Отмена → `deleteSession`. Ошибка → `failSession`, контекст сохраняется.
+1. `send` → если `draft.extendSessionId` задан (кнопка **Extend** на Result): `replaceSessionContext` на
+   существующую сессию (**без** `pending`, CodeLens остаётся); иначе `createSession` (`pending`).
+2. `withSharedInstructions` + изоляция: `.cursorignore` block + (Cursor) `sandboxOptions`; затем
+   `provider.explain`. `AgentItem[]`: код (+ `fileText`), явно добавленные `result`, вложения `file`,
+   шаблон. Диаграммы агента — только `.xplain/diagrams/<sessionId>/`.
+3. Успех → `completeSession` (overwrite `result.html`) → `draft.clear()` → `openResult`.
+   Отмена нового send → `deleteSession`; отмена/ошибка Extend → прежний result сохраняется.
+4. `inlineAssets` при сохранении/открытии не подтягивает PNG из чужих `diagrams/<id>/`.
 
 ### Результаты в редакторе
 
@@ -155,5 +155,7 @@ Proposed API не используются. Нижняя граница совм
 - CSP webview: `default-src 'none'`, скрипты только с nonce, стили/шрифты/картинки из `cspSource`
   (+ `https:`/`data:` для картинок), фреймы только из `cspSource`.
 - Markdown агента рендерится без raw HTML; HTML агента — в Shadow DOM панели Result (без nested iframe).
-- Файлы шаблонов: ограничение 1 МБ, бинарные отбрасываются, имена санитизируются.
+- Файлы шаблонов / draft-вложений: ограничение 1 МБ, имена санитизируются.
 - Ключ API — только в `SecretStorage`.
+- Изоляция артефактов: общий промпт + scoped `inlineAssets`; для Cursor SDK — sandbox и
+  managed `.cursorignore` (`src/agent/cursorIsolation.ts`). Hermес без Landlock — только промпт.

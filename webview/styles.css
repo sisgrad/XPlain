@@ -123,6 +123,17 @@ textarea {
   color: var(--vscode-statusBarItem-warningForeground);
 }
 
+.banner.extend-banner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.banner.extend-banner .grow {
+  flex: 1 1 12rem;
+}
+
 .banner.info {
   background: var(--vscode-inputValidation-infoBackground);
   border-bottom: 1px solid var(--vscode-inputValidation-infoBorder);

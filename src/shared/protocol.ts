@@ -74,6 +74,9 @@ export type ViewMessage =
   | { type: 'clearDraft' }
   | { type: 'send' }
   | { type: 'cancel' }
+  | { type: 'beginExtend'; sessionId: string }
+  | { type: 'cancelExtend' }
+  | { type: 'addDraftFiles'; files: Array<{ name: string; content: string }> }
   | { type: 'openSession'; sessionId: string }
   | { type: 'openSessionInEditor'; sessionId: string }
   | { type: 'addSessionToDraft'; sessionId: string }
@@ -91,7 +94,7 @@ export type ViewMessage =
   | { type: 'deleteTemplate'; templateId: string }
   | { type: 'loadTemplateForEdit'; templateId: string }
   | { type: 'pickTemplateFiles' }
-  | { type: 'readUris'; uris: string[] }
+  | { type: 'readUris'; uris: string[]; destination?: 'template' | 'draft' }
   | { type: 'chooseBackground' }
   | { type: 'clearBackground' }
   | { type: 'dropBackground'; name: string; dataBase64: string }

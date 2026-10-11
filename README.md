@@ -29,15 +29,17 @@ architecture, development, troubleshooting) lives in the `docs/` folder of the r
    ([coleam00/excalidraw-diagram-skill](https://github.com/coleam00/excalidraw-diagram-skill) —
    XPlain stores it in `.xplain/skills/` and adapts it for the selected agent on send).
 3. Press **Send to agent** (or Ctrl+Enter in the question box). Nothing is sent until you confirm.
+   You can also drop text files onto the **Context** tab as attachments.
 4. The answer streams into the **Result** tab and is saved as a self-contained
-   `.xplain/sessions/<id>/result.html` (Markdown is wrapped into HTML; local diagram files
-   referenced by path are inlined as `data:` URIs so the file needs no sidecar assets).
+   `.xplain/sessions/<id>/result.html` (Markdown is wrapped into HTML; diagram paths under
+   `.xplain/diagrams/<sessionId>/` are inlined as `data:` URIs). Agents must not reuse other
+   sessions' artifacts unless you explicitly add them to the draft.
 5. Every block that was part of the context gets a CodeLens: `XPlain: <title>` or
    `XPlain: 3 explanations · <latest title>`. Clicking it opens a dropdown of all explanations
    attached to that block; titles are chat-like summaries, not `v1`/`v2`.
-6. To reuse an explanation as input, leave the editor, press **Shift+X** (pick mode turns on and
-   is shown in the status bar), click the block's CodeLens and choose the result. It is added to
-   the context. The hover over a block and the dropdown also offer "Add to context" buttons.
+6. **Extend** on the Result tab revises that explanation in place (follow-up question, more blocks,
+   files → **Send (overwrite)**). Pick mode (Shift+X outside the editor) still adds a prior result
+   into a *new* context without overwriting.
 
 ### Keyboard
 

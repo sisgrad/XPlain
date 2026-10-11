@@ -76,15 +76,31 @@ export class CursorSdkProvider implements AgentProvider {
     let run: Awaited<ReturnType<NonNullable<typeof agent>['send']>> | undefined;
     const startedAt = Date.now();
     try {
-      agent = await sdk.Agent.create({
-        apiKey: cfg.apiKey,
-        model: { id: cfg.model },
-        local: {
-          cwd: cfg.cwd,
-          // Without this the SDK ignores project skills (default settingSources: []).
-          settingSources: cfg.loadProjectSettings === false ? [] : ['project'],
-        },
-      });
+      const localBase = {
+        cwd: cfg.cwd,
+        // Without this the SDK ignores project skills (default settingSources: []).
+        settingSources: (cfg.loadProjectSettings === false ? [] : ['project']) as Array<'project' | 'user' | 'team'>,
+      };
+      try {
+        agent = await sdk.Agent.create({
+          apiKey: cfg.apiKey,
+          model: { id: cfg.model },
+          local: {
+            ...localBase,
+            // Landlock + .cursorignore hide other sessions/diagrams (see cursorIsolation.ts).
+            sandboxOptions: { enabled: true },
+          },
+        });
+      } catch (err) {
+        // Older hosts / missing sandbox helper: fall back to unsandboxed local agent.
+        const msg = err instanceof Error ? err.message : String(err);
+        if (!/sandbox|ConfigurationError|bubblewrap|landlock/i.test(msg)) throw err;
+        agent = await sdk.Agent.create({
+          apiKey: cfg.apiKey,
+          model: { id: cfg.model },
+          local: localBase,
+        });
+      }
 
       const onAbort = () => {
         if (run?.supports('cancel')) void run.cancel();

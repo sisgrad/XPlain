@@ -26,6 +26,9 @@ export class MockAgentProvider implements AgentProvider {
       } else if (item.type === 'result') {
         parts.push(`## Referenced result: ${item.title}\n`);
         parts.push(`Included ${item.content.length} characters of a previous ${item.format} answer.\n`);
+      } else if (item.type === 'file') {
+        parts.push(`## Attached file: ${item.name}\n`);
+        parts.push(`${item.content.length} characters attached.\n`);
       } else {
         parts.push(`## Template: ${item.name}\n`);
         if (item.instruction) parts.push(`Instruction: ${item.instruction}\n`);

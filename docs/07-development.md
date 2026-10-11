@@ -95,11 +95,13 @@ media/                иконки
 Интеграционных тестов в реальном VS Code нет (нет дисплея на хосте разработки). Ручной чек-лист перед релизом:
 
 1. Shift+X на выделении → элемент `L..-L..` в панели, подсветка блока.
-2. Send (mock) → стриминг во вкладке Result, CodeLens над блоком, запись в `.xplain/`.
+2. Send → стриминг во вкладке Result, CodeLens над блоком, запись в `.xplain/`.
 3. Второй send того же блока → CodeLens `2 explanations`, Quick Pick с двумя пунктами.
-4. Подблок внутри блока → отдельный CodeLens.
-5. Pick mode: Shift+X вне редактора → клик CodeLens → результат в контексте.
-6. Правка выше блока → CodeLens сдвигается; reload окна → якорь найден.
+4. Result → **Extend** → follow-up → **Send (overwrite)** → тот же session id, обновлённый `result.html`.
+5. Подблок внутри блока → отдельный CodeLens.
+6. Pick mode: Shift+X вне редактора → клик CodeLens → результат в контексте (новый send, не overwrite).
+7. Drop `.md` на Context → item `file` в draft.
+8. Правка выше блока → CodeLens сдвигается; reload окна → якорь найден.
 7. Templates: drop из Explorer и из ОС, сохранение, выбор в Context, передача в запрос.
 8. Фон: выбор файла, drop картинки, настройки opacity/blur/fit, очистка.
 9. Ответ всегда `result.html` (Shadow DOM в панели, Open in editor); Markdown от агента оборачивается автоматически.

@@ -135,19 +135,20 @@ Authorization: Bearer <ключ>                       # если задан к�
   "excalidrawSkillCanonicalPath": ".xplain/skills/excalidraw-diagram", // устойчивое хранилище
   "excalidrawSkillBridge": "cursor",  // "cursor" | "claude" | "none"
   "systemPrompt": "You are XPlain…",  // общий system — тот же текст, что у chat/Cursor
-  "instructions": "## Language\n…\n## Output format…", // общий user-блок инструкций
-  "items": [ /* в порядке, заданном пользователем */ ]
+  "instructions": "## Language\n…\n## Output format…\n## Artifact access…", // общий user-блок
+  "extendSessionId": "mv2ngpzs-a1e0626c", // задано при Result → Extend (overwrite той же сессии)
+  "items": [ /* code | result | file | template — только то, что в черновике */ ]
 }
 ```
 
 **Одинаковые инструкции для всех агентов.** Перед Send XPlain вызывает `withSharedInstructions`
 (`src/agent/prompt.ts`): один `systemPrompt` + один блок `instructions` (язык, HTML с путями к
-картинкам, опционально Excalidraw). Hermes / OpenAI / Anthropic / Cursor SDK получают тот же текст
-через `buildChatPrompt`; провайдер `xplain` получает те же поля в JSON. Нет отдельных «курсорных»
-правил про base64. Диаграммы — только в `.xplain/diagrams/<sessionId>/`, без переиспользования
-чужих PNG. Поля `explainLanguage` / `useExcalidraw` / skill-пути выставляет Context; канон скилла —
-`.xplain/skills/<id>/`, при необходимости bridge. Upstream: `skills/excalidraw-diagram/`
-([coleam00/excalidraw-diagram-skill](https://github.com/coleam00/excalidraw-diagram-skill)).
+картинкам, **Artifact access**, опционально Excalidraw / Extend mode). Hermes / OpenAI / Anthropic /
+Cursor SDK получают тот же текст через `buildChatPrompt`; провайдер `xplain` — те же поля в JSON.
+Диаграммы — только `.xplain/diagrams/<sessionId>/`. Чужие `sessions/` и `diagrams/<other>/` —
+запрещены, пока пользователь явно не положил результат в draft. Cursor SDK дополнительно включает
+sandbox и пишет managed `.cursorignore`. Канон скилла — `.xplain/skills/<id>/` (offline vendor
+Excalidraw в `references/vendor/`).
 
 #### Элементы `items`
 

@@ -26,10 +26,15 @@ export interface InlineAssetsOptions {
   workspaceRoots: string[];
   /** Read an absolute filesystem path; return undefined when missing/unreadable. */
   readFile: (absPath: string) => Promise<Uint8Array | undefined>;
-  /** Optional directory listing for basename fallback under `.xplain/diagrams`. */
+  /** Optional directory listing for basename fallback under session diagrams. */
   listDir?: (absPath: string) => Promise<string[]>;
   /** Skip files larger than this (bytes). Default 12 MiB. */
   maxBytes?: number;
+  /**
+   * When set, basename fallback only looks under `.xplain/diagrams/<sessionId>/`
+   * (never other sessions or the diagrams root).
+   */
+  sessionId?: string;
 }
 
 export interface InlineAssetsResult {
@@ -50,12 +55,19 @@ export async function inlineLocalAssets(html: string, opts: InlineAssetsOptions)
     if (!cleaned || SKIP_SCHEME.test(cleaned)) return undefined;
     if (cache.has(cleaned)) return cache.get(cleaned);
 
-    const candidates = candidatePaths(cleaned, opts.workspaceRoots);
-    if (opts.listDir) {
+    // Explicit path into another session's diagram folder → never rewrite to this session.
+    if (opts.sessionId && foreignSessionDiagramRef(cleaned, opts.sessionId)) {
+      missing.push(cleaned);
+      cache.set(cleaned, undefined);
+      return undefined;
+    }
+
+    const candidates = candidatePaths(cleaned, opts.workspaceRoots, opts.sessionId);
+    if (opts.listDir && opts.sessionId) {
       const base = path.posix.basename(cleaned.replace(/\\/g, '/'));
       if (base && !base.includes('..')) {
         for (const root of opts.workspaceRoots) {
-          const dir = path.join(root, '.xplain', 'diagrams');
+          const dir = path.join(root, '.xplain', 'diagrams', opts.sessionId);
           try {
             const names = await opts.listDir(dir);
             if (names.includes(base)) candidates.push(path.join(dir, base));
@@ -68,6 +80,7 @@ export async function inlineLocalAssets(html: string, opts: InlineAssetsOptions)
 
     let dataUri: string | undefined;
     for (const abs of unique(candidates)) {
+      if (opts.sessionId && isForbiddenDiagramPath(abs, opts.workspaceRoots, opts.sessionId)) continue;
       const bytes = await opts.readFile(abs);
       if (!bytes || bytes.byteLength === 0 || bytes.byteLength > maxBytes) continue;
       const mime = mimeFor(abs, bytes);
@@ -119,7 +132,7 @@ export async function inlineLocalAssets(html: string, opts: InlineAssetsOptions)
 }
 
 /** Build filesystem candidates for a path/URL appearing in HTML. */
-export function candidatePaths(ref: string, workspaceRoots: string[]): string[] {
+export function candidatePaths(ref: string, workspaceRoots: string[], sessionId?: string): string[] {
   const out: string[] = [];
   let raw = ref.trim();
   if (raw.startsWith('file://')) {
@@ -159,11 +172,36 @@ export function candidatePaths(ref: string, workspaceRoots: string[]): string[] 
       out.push(path.join(root, ...rel.split('/').filter(Boolean)));
     }
     if (base && base.includes('.')) {
-      out.push(path.join(root, '.xplain', 'diagrams', base));
-      out.push(path.join(root, '.xplain', base));
+      if (sessionId) out.push(path.join(root, '.xplain', 'diagrams', sessionId, base));
+      else {
+        // Legacy: only when session scope is unknown (tests / old callers).
+        out.push(path.join(root, '.xplain', 'diagrams', base));
+      }
     }
   }
   return unique(out);
+}
+
+/** True when `abs` is under `.xplain/diagrams` but not this session's folder. */
+export function isForbiddenDiagramPath(abs: string, workspaceRoots: string[], sessionId: string): boolean {
+  const norm = path.resolve(abs);
+  for (const root of workspaceRoots) {
+    const diagrams = path.resolve(root, '.xplain', 'diagrams');
+    const allowed = path.resolve(diagrams, sessionId);
+    if (norm === diagrams || norm.startsWith(diagrams + path.sep)) {
+      if (norm === allowed || norm.startsWith(allowed + path.sep)) return false;
+      return true;
+    }
+  }
+  return false;
+}
+
+/** True when an HTML ref points at `.xplain/diagrams/<otherSession>/…`. */
+export function foreignSessionDiagramRef(ref: string, sessionId: string): boolean {
+  const posix = ref.replace(/\\/g, '/');
+  const m = posix.match(/\.xplain\/diagrams\/([^/]+)\//);
+  if (!m) return false;
+  return m[1] !== sessionId;
 }
 
 function mimeFor(absPath: string, bytes: Uint8Array): string | undefined {
