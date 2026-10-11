@@ -459,12 +459,14 @@ export class XplainController implements vscode.Disposable {
       return;
     }
     await this.d.view.reveal(true);
-    if (result.format === 'html') {
-      const uri = this.d.storeFs ? this.d.view.asWebviewUri(this.d.storeFs.uri(store.resultPath(sessionId, 'html'))) : undefined;
-      this.d.view.post({ type: 'showResult', session, format: 'html', content: '', htmlUri: uri ? `${uri}?v=${Date.now()}` : undefined });
-    } else {
-      this.d.view.post({ type: 'showResult', session, format: 'markdown', content: result.content });
-    }
+    // Pass HTML body for srcdoc rendering. Loading result.html via asWebviewUri inside a
+    // sandboxed iframe is unreliable on Remote-SSH (blank white frame).
+    this.d.view.post({
+      type: 'showResult',
+      session,
+      format: result.format,
+      content: result.content,
+    });
     this.d.view.post({ type: 'tab', tab: 'result' });
   }
 

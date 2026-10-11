@@ -91,8 +91,8 @@ export class XplainViewProvider implements vscode.WebviewViewProvider, vscode.Di
       `style-src ${webview.cspSource} 'unsafe-inline'`,
       `font-src ${webview.cspSource}`,
       `script-src 'nonce-${nonce}'`,
-      // Self-contained HTML results are served from .xplain via a sandboxed iframe.
-      `frame-src ${webview.cspSource}`,
+      // Result HTML is shown in a sandboxed iframe via srcdoc (and optionally vscode-resource).
+      `frame-src 'self' ${webview.cspSource} blob: data:`,
     ].join('; ');
     return `<!DOCTYPE html>
 <html lang="en">

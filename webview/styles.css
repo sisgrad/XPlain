@@ -663,7 +663,7 @@ textarea.question {
   min-height: 300px;
   width: 100%;
   border: 1px solid var(--vscode-panel-border);
-  background: #fff;
+  background: var(--vscode-editor-background, #1e1e1e);
   border-radius: var(--radius);
 }
 

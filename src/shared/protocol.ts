@@ -47,8 +47,9 @@ export type HostMessage =
       type: 'showResult';
       session: SessionMeta;
       format: ResultFormat;
-      /** Markdown source, or (for html) a webview-safe URI of the html file. */
+      /** Markdown source, or full HTML document (rendered via iframe srcdoc). */
       content: string;
+      /** @deprecated Prefer `content` + srcdoc; kept as a fallback URI. */
       htmlUri?: string;
     }
   | { type: 'streamStart'; sessionId: string; title: string }

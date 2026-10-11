@@ -132,8 +132,8 @@ webview/
 2. `XplainCodeLensProvider` создаёт CodeLens с командой `xplain.showResults(anchorId)` для якорей с готовыми сессиями.
 3. `showResultsForAnchor` → `createQuickPick` с кнопками (`QuickInputButton`). В pick mode выбор добавляет
    результат в draft и выключает режим; иначе открывает результат в панели.
-4. HTML-результат отдаётся в webview как `asWebviewUri` файла в `.xplain/` и рендерится в `iframe sandbox`;
-   `.xplain/` входит в `localResourceRoots`, CSP содержит `frame-src ${cspSource}`.
+4. HTML-результат передаётся в webview целиком (`content`) и показывается в `iframe` через `srcdoc`
+   (`sandbox="allow-scripts"`). Загрузка файла через `asWebviewUri` на Remote-SSH часто даёт пустой кадр.
 
 ## Используемые API VS Code (все стабильные)
 

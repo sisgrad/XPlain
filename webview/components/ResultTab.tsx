@@ -56,7 +56,9 @@ export function ResultTab({ result, stream, busy }: Props) {
         {result.session.question.trim() && <div class="result-question">Q: {result.session.question}</div>}
       </div>
       {result.format === 'html' ? (
-        result.htmlUri ? (
+        result.content.trim() ? (
+          <HtmlFrame html={result.content} title={result.session.title} />
+        ) : result.htmlUri ? (
           <iframe class="html-result" src={result.htmlUri} sandbox="allow-scripts" title={result.session.title} />
         ) : (
           <div class="hint">HTML result could not be located on disk.</div>
@@ -66,6 +68,16 @@ export function ResultTab({ result, stream, busy }: Props) {
       )}
     </div>
   );
+}
+
+/** Render agent HTML via srcdoc — reliable on Remote-SSH unlike vscode-webview iframe src. */
+function HtmlFrame({ html, title }: { html: string; title: string }) {
+  const ref = useRef<HTMLIFrameElement>(null);
+  useEffect(() => {
+    const frame = ref.current;
+    if (frame) frame.srcdoc = html;
+  }, [html]);
+  return <iframe ref={ref} class="html-result" sandbox="allow-scripts" title={title} />;
 }
 
 function MarkdownBody({ source }: { source: string }) {
