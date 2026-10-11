@@ -51,8 +51,9 @@
   файлов и ссылки на строки (`L12-L48`) остаются без перевода.
 - **Draw diagrams with the Excalidraw skill** — чекбокс. Когда отмечен, перед отправкой XPlain копирует
   в проект скилл [excalidraw-diagram-skill](https://github.com/coleam00/excalidraw-diagram-skill)
-  (в `.claude/skills/excalidraw-diagram/`) и явно просит агента установить/использовать его и
-  нарисовать диаграммы в формате `.excalidraw` (обычно в `.xplain/diagrams/`).
+  в `.cursor/skills/excalidraw-diagram/` и `.claude/skills/excalidraw-diagram/`, просит агента
+  прочитать `SKILL.md` и нарисовать диаграммы (обычно в `.xplain/diagrams/`). Для Cursor SDK дополнительно
+  включается загрузка project skills (`settingSources: project`).
 
 Шаблон, язык и чекбокс диаграмм сохраняются между отправками, Clear context и перезагрузками окна
 (workspaceState). Текст вопроса после отправки/очистки не сохраняется.

@@ -18,6 +18,11 @@ export interface CursorSdkConfig {
   /** Directory for the JSONL local agent store (avoids requiring node:sqlite). */
   storeDir: string;
   streaming: boolean;
+  /**
+   * Load project `.cursor/` / `.claude/` skills & rules into the local agent.
+   * SDK default is [] (no ambient skills) — XPlain turns this on so Excalidraw works.
+   */
+  loadProjectSettings?: boolean;
 }
 
 type CursorSdk = typeof import('@cursor/sdk');
@@ -83,7 +88,11 @@ export class CursorSdkProvider implements AgentProvider {
       agent = await sdk.Agent.create({
         apiKey: cfg.apiKey,
         model: { id: cfg.model },
-        local: { cwd: cfg.cwd },
+        local: {
+          cwd: cfg.cwd,
+          // Without this the SDK ignores project skills (default settingSources: []).
+          settingSources: cfg.loadProjectSettings === false ? [] : ['project'],
+        },
       });
 
       const onAbort = () => {

@@ -1,11 +1,17 @@
 /**
  * Install the bundled Excalidraw Diagram skill into the workspace so coding
- * agents (Hermes, Claude Code, …) can load it from `.claude/skills/…`.
+ * agents can load it from `.claude/skills/…` (Claude/Hermes) and
+ * `.cursor/skills/…` (Cursor IDE / Cursor SDK).
  */
 import * as vscode from 'vscode';
-import { EXCALIDRAW_SKILL_ID, EXCALIDRAW_SKILL_WORKSPACE_PATH } from './excalidrawInstructions';
+import {
+  EXCALIDRAW_SKILL_CURSOR_PATH,
+  EXCALIDRAW_SKILL_ID,
+  EXCALIDRAW_SKILL_WORKSPACE_PATH,
+} from './excalidrawInstructions';
 
 export {
+  EXCALIDRAW_SKILL_CURSOR_PATH,
   EXCALIDRAW_SKILL_ID,
   EXCALIDRAW_SKILL_REPO,
   EXCALIDRAW_SKILL_WORKSPACE_PATH,
@@ -18,17 +24,26 @@ export function bundledSkillUri(extensionUri: vscode.Uri): vscode.Uri {
 }
 
 /**
- * Copy the bundled skill into `.claude/skills/excalidraw-diagram/` of the first
- * workspace folder. Overwrites existing files so the workspace stays in sync
- * with the skill version shipped in the extension. Returns the relative path.
+ * Copy the bundled skill into both Claude- and Cursor-compatible skill roots.
+ * Overwrites existing files so the workspace stays in sync with the skill
+ * version shipped in the extension. Returns the Claude-compatible relative path
+ * (kept for backward compatibility with prompts / logs).
  */
 export async function ensureExcalidrawSkillInstalled(extensionUri: vscode.Uri): Promise<string> {
   const folder = vscode.workspace.workspaceFolders?.[0];
   if (!folder) throw new Error('Open a folder to install the Excalidraw skill.');
   const srcRoot = bundledSkillUri(extensionUri);
-  const dstRoot = vscode.Uri.joinPath(folder.uri, '.claude', 'skills', EXCALIDRAW_SKILL_ID);
-  await copyTree(srcRoot, dstRoot);
+  const destinations = [
+    vscode.Uri.joinPath(folder.uri, '.claude', 'skills', EXCALIDRAW_SKILL_ID),
+    vscode.Uri.joinPath(folder.uri, '.cursor', 'skills', EXCALIDRAW_SKILL_ID),
+  ];
+  for (const dstRoot of destinations) await copyTree(srcRoot, dstRoot);
   return EXCALIDRAW_SKILL_WORKSPACE_PATH;
+}
+
+/** Cursor-native path (same install as {@link ensureExcalidrawSkillInstalled}). */
+export function excalidrawCursorSkillPath(): string {
+  return EXCALIDRAW_SKILL_CURSOR_PATH;
 }
 
 async function copyTree(src: vscode.Uri, dst: vscode.Uri): Promise<void> {

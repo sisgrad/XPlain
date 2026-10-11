@@ -204,7 +204,9 @@ export class XplainController implements vscode.Disposable {
     if (draft.useExcalidraw) {
       try {
         excalidrawSkillPath = await ensureExcalidrawSkillInstalled(this.d.context.extensionUri);
-        this.d.output.appendLine(`[skills] installed Excalidraw skill → ${excalidrawSkillPath}`);
+        this.d.output.appendLine(
+          `[skills] installed Excalidraw skill → ${excalidrawSkillPath} and .cursor/skills/excalidraw-diagram`,
+        );
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
         this.d.view.post({ type: 'notice', level: 'error', message: `Could not install the Excalidraw skill: ${message}` });

@@ -205,6 +205,8 @@ export class AgentRegistry {
           cwd: vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? '',
           storeDir: cursorSdkStoreDir(this.context.globalStorageUri.fsPath),
           streaming: settings.streaming,
+          // Always load project skills/rules so Excalidraw under .cursor/skills is visible.
+          loadProjectSettings: true,
         }));
       case 'xplain':
       default:

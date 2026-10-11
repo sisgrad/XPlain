@@ -84,6 +84,8 @@ describe('buildChatPrompt', () => {
     assert.match(p.user, /coleam00\/excalidraw-diagram-skill/);
     assert.match(p.user, /data:image\/png;base64/);
     assert.match(p.user, /\/hdd\/XPlain\/\.xplain\/diagrams/);
+    assert.match(p.user, /\.cursor\/skills\/excalidraw-diagram/);
+    assert.match(p.user, /\.claude\/skills\/excalidraw-diagram/);
     assert.match(p.system, /Language and Diagrams/);
   });
 

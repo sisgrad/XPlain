@@ -110,6 +110,14 @@ dashboard с cookie-аутентификацией; XPlain работает с �
 блока изменился и вне редактора, и внутри, автоматический поиск невозможен — добавьте блок заново, старое
 объяснение останется в History.
 
+## Cursor SDK не использует Excalidraw skill
+
+1. В Context должен быть включён чекбокс **Draw diagrams with the Excalidraw skill**.
+2. До фикса XPlain ставил skill только в `.claude/skills/…`, а Cursor SDK по умолчанию
+   **не загружает** project skills (`settingSources: []`). Теперь skill копируется ещё и в
+   `.cursor/skills/excalidraw-diagram/`, а локальный агент создаётся с `settingSources: ['project']`.
+3. В Output → XPlain при Send должна быть строка `[skills] installed Excalidraw skill → …`.
+
 ## Cursor SDK вернул короткий текст вместо HTML
 
 Cursor-агент иногда пишет полный HTML в `.xplain/*.html` и в чат кладёт заглушку («не помещается / open the file»).
