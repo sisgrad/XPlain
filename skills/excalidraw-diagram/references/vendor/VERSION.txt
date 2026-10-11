@@ -1,0 +1,3 @@
+@excalidraw/excalidraw@0.18.1
+bundle=excalidraw-export.iife.js
+built-for=offline Playwright render (exportToSvg)

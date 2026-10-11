@@ -81,7 +81,11 @@ def render(
         from playwright.sync_api import sync_playwright
     except ImportError:
         print("ERROR: playwright not installed.", file=sys.stderr)
-        print("Run: cd .claude/skills/excalidraw-diagram/references && uv sync && uv run playwright install chromium", file=sys.stderr)
+        print(
+            "Run: cd <skill>/references && uv sync && uv run playwright install chromium",
+            file=sys.stderr,
+        )
+        print("(skill lives under .xplain/skills/excalidraw-diagram/ or a Cursor/Claude bridge)", file=sys.stderr)
         sys.exit(1)
 
     # Read and validate
@@ -128,7 +132,10 @@ def render(
         except Exception as e:
             if "Executable doesn't exist" in str(e) or "browserType.launch" in str(e):
                 print("ERROR: Chromium not installed for Playwright.", file=sys.stderr)
-                print("Run: cd .claude/skills/excalidraw-diagram/references && uv run playwright install chromium", file=sys.stderr)
+                print(
+                    "Run: cd <skill>/references && uv run playwright install chromium",
+                    file=sys.stderr,
+                )
                 sys.exit(1)
             raise
 
@@ -137,10 +144,9 @@ def render(
             device_scale_factor=scale,
         )
 
-        # Load the template
+        # Load the template (uses vendored Excalidraw IIFE — no CDN).
         page.goto(template_url)
 
-        # Wait for the ES module to load (imports from esm.sh)
         page.wait_for_function("window.__moduleReady === true", timeout=30000)
 
         # Inject the diagram data and render

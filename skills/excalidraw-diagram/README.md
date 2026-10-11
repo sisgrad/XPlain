@@ -58,6 +58,7 @@ excalidraw-diagram/
     element-templates.md            # JSON templates for each element type
     json-schema.md                  # Excalidraw JSON format reference
     render_excalidraw.py            # Render .excalidraw to PNG
-    render_template.html            # Browser template for rendering
+    render_template.html            # Browser template for rendering (offline)
+    vendor/                         # Vendored Excalidraw exportToSvg IIFE (no CDN)
     pyproject.toml                  # Python dependencies (playwright)
 ```

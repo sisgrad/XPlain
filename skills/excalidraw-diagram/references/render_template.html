@@ -12,21 +12,25 @@
 <body>
   <div id="root"></div>
 
-  <script type="module">
-    import { exportToSvg } from "https://esm.sh/@excalidraw/excalidraw?bundle";
-
-    window.renderDiagram = async function(jsonData) {
+  <!-- Offline: vendored IIFE (see vendor/VERSION.txt). No CDN / esm.sh. -->
+  <script src="./vendor/excalidraw-export.iife.js"></script>
+  <script>
+    window.renderDiagram = async function (jsonData) {
       try {
         const data = typeof jsonData === "string" ? JSON.parse(jsonData) : jsonData;
         const elements = data.elements || [];
         const appState = data.appState || {};
         const files = data.files || {};
 
-        // Force white background in appState
         appState.viewBackgroundColor = appState.viewBackgroundColor || "#ffffff";
         appState.exportWithDarkMode = false;
 
-        const svg = await exportToSvg({
+        const api = window.ExcalidrawExport;
+        if (!api || typeof api.exportToSvg !== "function") {
+          throw new Error("Vendored Excalidraw export missing (vendor/excalidraw-export.iife.js).");
+        }
+
+        const svg = await api.exportToSvg({
           elements: elements,
           appState: {
             ...appState,
@@ -35,7 +39,6 @@
           files: files,
         });
 
-        // Clear any previous render
         const root = document.getElementById("root");
         root.innerHTML = "";
         root.appendChild(svg);
@@ -50,7 +53,6 @@
       }
     };
 
-    // Signal that the module is loaded and ready
     window.__moduleReady = true;
   </script>
 </body>

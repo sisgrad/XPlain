@@ -451,10 +451,13 @@ You cannot judge a diagram from JSON alone. After generating or editing the Exca
 ### How to Render
 
 ```bash
-cd .claude/skills/excalidraw-diagram/references && uv run python render_excalidraw.py <path-to-file.excalidraw>
+# Prefer the path XPlain installed for this agent (.xplain/skills/… or a .cursor/.claude bridge):
+cd <skill>/references && uv run python render_excalidraw.py <path-to-file.excalidraw>
 ```
 
 This outputs a PNG next to the `.excalidraw` file. Then use the **Read tool** on the PNG to actually view it.
+The HTML template loads **vendored** `vendor/excalidraw-export.iife.js` — no CDN. First-time setup:
+`uv sync && uv run playwright install chromium` in `references/`.
 
 ### The Loop
 

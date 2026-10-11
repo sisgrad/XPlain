@@ -52,7 +52,7 @@ export function excalidrawAgentInstructions(
     'You MUST use the **Excalidraw Diagram** skill to illustrate this explanation with at least one diagram whenever a visual argument helps (architecture, data flow, concurrency, state machines, pipelines, etc.).',
     '',
     `1. **Skill for this request:** \`${agentPath}/\` (from ${EXCALIDRAW_SKILL_REPO}). ${bridgeNote}`,
-    '2. If that folder is missing or incomplete, restore from the durable store or re-run Send with the Excalidraw checkbox on, then follow `SKILL.md` / `README.md` — including renderer setup (`uv sync` + Playwright Chromium under `references/`) if you need visual validation.',
+    '2. If that folder is missing or incomplete, restore from the durable store or re-run Send with the Excalidraw checkbox on, then follow `SKILL.md` / `README.md`. Renderer JS is **vendored offline** under `references/vendor/` (no CDN). You may still need a one-time local Playwright Chromium: `cd <skill>/references && uv sync && uv run playwright install chromium`.',
     `3. **Read** \`${agentPath}/SKILL.md\` and \`${agentPath}/references/color-palette.md\` before drawing. Follow the skill's methodology (diagrams that *argue*, evidence artifacts for technical diagrams). Do not improvise a different diagram toolchain.`,
     `4. **Session-scoped output directory (mandatory):** create and use only \`${relDir}/\` (absolute: \`${diagramsDir}/\`).`,
     '   Put **new** `.excalidraw` sources and the PNGs you render from them in that folder. Use unique filenames for this run (e.g. `qk-mma-flow.png`).',

@@ -13,6 +13,7 @@ discovery bridge).
 HTML answer. Do **not** reuse PNGs from other sessions or from `.xplain/diagrams/` root. Do not paste
 base64 into the reply — XPlain inlines the new files when saving `result.html`.
 
-**Renderer note:** `references/render_template.html` loads `@excalidraw/excalidraw` from
-`https://esm.sh/...` inside Playwright. If that CDN is unreachable from the machine, PNG export fails
-— fix network/CDN access (or vendor the bundle); do not fall back to someone else's PNG.
+**Offline renderer:** `references/render_template.html` loads a **vendored** IIFE from
+`references/vendor/excalidraw-export.iife.js` (no `esm.sh` / CDN at render time). One-time local
+setup still needed for Playwright Chromium: `cd references && uv sync && uv run playwright install chromium`.
+Do not fall back to someone else's PNG if Chromium is missing — install it.

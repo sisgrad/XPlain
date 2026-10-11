@@ -116,8 +116,9 @@
 для правок. Старые сессии с `result.md` открываются; при повторном завершении файл другого формата
 удаляется.
 
-Рендерер Excalidraw-скилла тянет `@excalidraw/excalidraw` с `esm.sh` в headless Chromium; без доступа
-к CDN PNG не собрать — агент должен чинить render, а не подставлять чужие картинки.
+Рендерер Excalidraw-скилла использует **локальный** бандл `references/vendor/excalidraw-export.iife.js`
+(без CDN). Нужен только одноразовый Playwright Chromium через `uv` в `references/`. При сбое render
+агент чинит окружение, а не подставляет чужие картинки.
 
 ## `templates/<id>/`
 
