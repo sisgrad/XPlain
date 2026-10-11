@@ -219,6 +219,7 @@
             "hermes",
             "openai",
             "anthropic",
+            "cursor",
             "mock"
           ],
           "enumDescriptions": [
@@ -226,6 +227,7 @@
             "Hermes Agent API server (OpenAI-compatible, default http://127.0.0.1:8642/v1).",
             "OpenAI / Codex models or any OpenAI-compatible Chat Completions server.",
             "Anthropic Messages API (Claude).",
+            "Cursor Agent SDK (@cursor/sdk) running locally against this workspace.",
             "Built-in offline mock answer (for demos and development)."
           ],
           "default": "xplain",
@@ -240,7 +242,12 @@
           "type": "string",
           "default": "",
           "editPresentation": "multilineText",
-          "description": "[hermes/openai/anthropic] Custom system prompt. Empty uses the built-in XPlain prompt (asks for a Markdown answer starting with an H1 title)."
+          "description": "[hermes/openai/anthropic/cursor] Custom system prompt. Empty uses the built-in XPlain prompt."
+        },
+        "xplain.agent.cursor.model": {
+          "type": "string",
+          "default": "composer-2.5",
+          "description": "[cursor] Model id for the Cursor Agent SDK (from Cursor.models.list(), e.g. composer-2.5)."
         },
         "xplain.agent.hermes.baseUrl": {
           "type": "string",
@@ -288,7 +295,7 @@
         "xplain.agent.streaming": {
           "type": "boolean",
           "default": true,
-          "description": "Stream partial output (NDJSON for the xplain provider, SSE for hermes/openai/anthropic)."
+          "description": "Stream partial output (NDJSON for the xplain provider, SSE for hermes/openai/anthropic, SDK stream for cursor)."
         },
         "xplain.agent.headers": {
           "type": "object",
@@ -342,11 +349,12 @@
     "check": "tsc -p tsconfig.json --noEmit && tsc -p webview/tsconfig.json --noEmit",
     "lint": "eslint src webview --ext .ts,.tsx",
     "test": "tsc -p tsconfig.test.json && mocha out/test/**/*.test.js",
-    "package": "node esbuild.mjs --production && vsce package --no-dependencies --allow-missing-repository --out dist/",
+    "package": "node esbuild.mjs --production && vsce package --allow-missing-repository --out dist/",
     "install:ide": "bash scripts/install.sh",
     "vscode:prepublish": "node esbuild.mjs --production"
   },
   "dependencies": {
+    "@cursor/sdk": "^1.0.37",
     "@vscode/codicons": "^0.0.36",
     "highlight.js": "^11.11.1",
     "markdown-it": "^14.1.0",

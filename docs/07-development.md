@@ -46,7 +46,7 @@ src/                  extension host (TypeScript, CommonJS-бандл)
   shared/             типы и протокол, общие с webview (алиас @shared/*)
   storage/            .xplain/, абстракция FS
   editor/             якоря, CodeLens, декорации, pick mode
-  agent/              AgentRegistry, провайдеры (xplain/hermes/openai/anthropic/mock), prompt, stream, titles
+  agent/              AgentRegistry, провайдеры (xplain/hermes/openai/anthropic/cursor/mock), prompt, stream, titles
   skills/             bundled Excalidraw skill + install helpers
   panel/              WebviewView, фон
   context/            ContextDraft

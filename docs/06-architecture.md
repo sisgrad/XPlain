@@ -10,7 +10,7 @@ flowchart LR
   Draft <-->|HostMessage / ViewMessage| Panel[XplainViewProvider WebviewView]
   Panel -->|send| Controller[XplainController]
   Controller --> Registry[AgentRegistry settings + secrets]
-  Registry --> Agent[AgentProvider: xplain / hermes / openai / anthropic / mock]
+  Registry --> Agent[AgentProvider: xplain / hermes / openai / anthropic / cursor / mock]
   Agent -->|delta / done| Controller
   Controller --> Store
   Store --> Live[LiveAnchors]

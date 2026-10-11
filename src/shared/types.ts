@@ -161,12 +161,17 @@ export const DEFAULT_DRAFT: DraftState = {
 /* ------------------------------------------------------------ agent setup */
 
 /** Backends the extension can talk to. */
-export type AgentProviderId = 'xplain' | 'hermes' | 'openai' | 'anthropic' | 'mock';
+export type AgentProviderId = 'xplain' | 'hermes' | 'openai' | 'anthropic' | 'cursor' | 'mock';
 
-export const AGENT_PROVIDER_IDS: AgentProviderId[] = ['xplain', 'hermes', 'openai', 'anthropic', 'mock'];
+export const AGENT_PROVIDER_IDS: AgentProviderId[] = ['xplain', 'hermes', 'openai', 'anthropic', 'cursor', 'mock'];
 
 export interface ChatProviderSettings {
   baseUrl: string;
+  model: string;
+}
+
+export interface CursorProviderSettings {
+  /** Model id from Cursor.models.list(), e.g. composer-2.5. */
   model: string;
 }
 
@@ -185,6 +190,7 @@ export interface AgentSettings {
   hermes: ChatProviderSettings;
   openai: ChatProviderSettings;
   anthropic: ChatProviderSettings & { maxTokens: number };
+  cursor: CursorProviderSettings;
 }
 
 export type SettingsTarget = 'global' | 'workspace';

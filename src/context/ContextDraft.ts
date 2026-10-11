@@ -13,7 +13,8 @@ export class ContextDraft {
   }
 
   get isEmpty(): boolean {
-    return this.state.items.length === 0 && this.state.question.trim() === '' && !this.state.templateId;
+    // Template / language / diagrams are prefs, not draft content.
+    return this.state.items.length === 0 && this.state.question.trim() === '';
   }
 
   /** Adds an item; identical code blocks / results are not duplicated. */
@@ -85,14 +86,22 @@ export class ContextDraft {
   }
 
   clear(options: { keepQuestion?: boolean } = {}): void {
-    // Keep language / diagram preferences across clears — they are UI choices, not context items.
+    // Keep template / language / diagram preferences — they are UI choices, not one-shot context.
     this.state = {
       items: [],
       question: options.keepQuestion ? this.state.question : '',
-      templateId: null,
+      templateId: this.state.templateId,
       explainLanguage: this.state.explainLanguage,
       useExcalidraw: this.state.useExcalidraw,
     };
+    this.fire();
+  }
+
+  /** Apply persisted Context-tab choices (template, language, diagrams). */
+  restorePrefs(prefs: { templateId: string | null; explainLanguage: ExplainLanguage; useExcalidraw: boolean }): void {
+    this.state.templateId = prefs.templateId;
+    this.state.explainLanguage = prefs.explainLanguage;
+    this.state.useExcalidraw = prefs.useExcalidraw;
     this.fire();
   }
 

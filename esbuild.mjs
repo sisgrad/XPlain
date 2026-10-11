@@ -32,7 +32,9 @@ const extensionOptions = {
   platform: 'node',
   target: 'node18',
   format: 'cjs',
-  external: ['vscode'],
+  // @cursor/sdk ships a large prebuilt CJS tree that does not esbuild cleanly
+  // (bun:sqlite / .d.ts side-effects). Load it at runtime from node_modules.
+  external: ['vscode', '@cursor/sdk'],
   sourcemap: !production,
   minify: production,
   logLevel: 'silent',

@@ -9,8 +9,8 @@ answer anchored to the code it explains. Answers are stored in the project
 
 Agents are pluggable and configured from the panel's **Agent** tab: a local
 **Hermes Agent** harness, **Anthropic (Claude)**, **OpenAI / Codex** (or any
-OpenAI-compatible server), your own service speaking the **XPlain HTTP contract**,
-or an offline **mock**.
+OpenAI-compatible server), **Cursor SDK**, your own service speaking the
+**XPlain HTTP contract**, or an offline **mock**.
 
 Built only on stable VS Code APIs (no proposed APIs), so it works in VS Code and Cursor,
 locally and through Remote-SSH.
@@ -102,6 +102,7 @@ press **Test connection** and then **Save** (to your user settings or to this wo
 | **Hermes Agent** | Hermes harness **API server** (OpenAI-compatible, port 8642) — not the dashboard/Remote-gateway URL Hermes Desktop uses. Enable it with `API_SERVER_ENABLED=true`, `API_SERVER_KEY=...` (and `API_SERVER_HOST=0.0.0.0` for remote access) in `~/.hermes/.env`. | Base URL (`http://127.0.0.1:8642/v1`), model/profile picked from the list the harness reports, key = `API_SERVER_KEY`. Tool-progress events are ignored, the final answer is streamed. |
 | **Anthropic (Claude)** | Anthropic Messages API. | Base URL, model picked from the server list, `max_tokens`, API key (`x-api-key`). |
 | **OpenAI / Codex** | OpenAI Chat Completions, or any compatible server (Ollama, vLLM, LiteLLM, OpenRouter). | Base URL (`https://api.openai.com/v1`), model picked from the server list, API key (Bearer). |
+| **Cursor SDK** | Local Cursor agent via `@cursor/sdk` against this workspace. | Model from your Cursor account (e.g. `composer-2.5`), API key from [Integrations](https://cursor.com/dashboard/integrations). |
 | **XPlain HTTP agent** | Your own service speaking the contract below. | Endpoint URL, optional Bearer key. |
 | **Mock (offline)** | Built-in canned answer. | - |
 

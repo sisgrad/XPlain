@@ -48,12 +48,14 @@
 - **Template** — выпадающий список сохранённых шаблонов. Выбранный шаблон добавит в запрос свою
   инструкцию и файлы. Иконка «карандаш» открывает шаблон для редактирования.
 - **Explanation language** — язык ответа агента: *English* или *Russian*. Идентификаторы кода, пути
-  файлов и ссылки на строки (`L12-L48`) остаются без перевода. Выбор сохраняется при очистке контекста.
+  файлов и ссылки на строки (`L12-L48`) остаются без перевода.
 - **Draw diagrams with the Excalidraw skill** — чекбокс. Когда отмечен, перед отправкой XPlain копирует
   в проект скилл [excalidraw-diagram-skill](https://github.com/coleam00/excalidraw-diagram-skill)
   (в `.claude/skills/excalidraw-diagram/`) и явно просит агента установить/использовать его и
-  нарисовать диаграммы в формате `.excalidraw` (обычно в `.xplain/diagrams/`). Флаг тоже сохраняется
-  после Clear context.
+  нарисовать диаграммы в формате `.excalidraw` (обычно в `.xplain/diagrams/`).
+
+Шаблон, язык и чекбокс диаграмм сохраняются между отправками, Clear context и перезагрузками окна
+(workspaceState). Текст вопроса после отправки/очистки не сохраняется.
 
 Контекст может состоять только из вопроса (без кода) — например, общий вопрос по проекту.
 
@@ -157,6 +159,7 @@ Pick mode выключается повторным Shift+X, кликом по �
 | **Hermes Agent** | У вас запущен Hermes harness с API-сервером | Base URL (`http://127.0.0.1:8642/v1` — именно API-сервер, **не** адрес Remote gateway из Hermes Desktop), модель/профиль — выбирается из списка, который отдаёт harness, ключ = `API_SERVER_KEY` из `~/.hermes/.env` |
 | **Anthropic (Claude)** | Прямой доступ к Claude | Base URL (`https://api.anthropic.com`), модель (например `claude-sonnet-5`), `max_tokens`, ключ API (обязателен) |
 | **OpenAI / Codex** | OpenAI-модели, в т.ч. Codex, или совместимый сервер (Ollama, vLLM, LiteLLM, OpenRouter) | Base URL (`https://api.openai.com/v1`), модель, ключ API (для локальных серверов не нужен) |
+| **Cursor SDK** | Локальный Cursor-агент через `@cursor/sdk` в текущем workspace | Модель из аккаунта Cursor (напр. `composer-2.5`), API key с [Integrations](https://cursor.com/dashboard/integrations) |
 | **XPlain HTTP agent** | Собственный сервис/мультиагентная система, реализующая [контракт XPlain](04-agent-api.md#контракт-xplain-provider--xplain) | Endpoint (`POST`), ключ API — опционально |
 | **Mock (offline)** | Посмотреть интерфейс без бэкенда | — |
 
@@ -175,7 +178,7 @@ Pick mode выключается повторным Shift+X, кликом по �
    `saved` / `not set` / `required`. **Clear** удаляет ключ. В поле ввода ключ никогда не отображается обратно.
    После сохранения ключа список моделей запрашивается заново.
 4. **Test connection** — проверка соединения с текущими значениями формы (ключ берётся сохранённый):
-   - Hermes / OpenAI / Anthropic: запрашивается список моделей; выводится число моделей и есть ли среди
+   - Hermes / OpenAI / Anthropic / Cursor: запрашивается список моделей; выводится число моделей и есть ли среди
      них выбранная; выпадающий список обновляется.
    - XPlain HTTP agent: отправляется короткий ping-запрос; успешен любой валидный ответ.
 5. **Save** — записать настройки. Переключатель **Save to** выбирает, куда:

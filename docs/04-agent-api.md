@@ -9,6 +9,7 @@ XPlain не содержит LLM — он формирует контекст и
 | `hermes` | Локальный Hermes Agent harness | OpenAI-совместимый Chat Completions + SSE |
 | `anthropic` | Claude через Anthropic Messages API | `POST /v1/messages` + SSE |
 | `openai` | OpenAI / Codex-модели или любой OpenAI-совместимый сервер (Ollama, vLLM, LiteLLM, OpenRouter) | Chat Completions + SSE |
+| `cursor` | Cursor Agent SDK (`@cursor/sdk`) локально против workspace | SDK `Agent.create` + stream |
 | `xplain` | Собственный сервис, говорящий на контракте XPlain (ниже) | JSON или NDJSON |
 | `mock` | Встроенный ответ без сети | — |
 
@@ -16,7 +17,15 @@ XPlain не содержит LLM — он формирует контекст и
 `headers` (дополнительные HTTP-заголовки). Ключи API хранятся в `SecretStorage` по одному на провайдера
 (`xplain.agent.apiKey.<provider>`), в `settings.json` и `.xplain/` не попадают.
 
-## Чат-провайдеры: Hermes, OpenAI, Anthropic
+## Cursor SDK (`provider = cursor`)
+
+Локальный агент через [`@cursor/sdk`](https://cursor.com/docs/sdk/typescript): `Agent.create({ local: { cwd: <workspace> } })`.
+Нужен Cursor API key (вкладка Agent → Save key; dashboard → Integrations). Модель — из `Cursor.models.list()`
+(по умолчанию `composer-2.5`, настройка `xplain.agent.cursor.model`). Промпт тот же, что у чат-провайдеров;
+ответ нормализуется в self-contained HTML. Для хранения локальных runs используется `JsonlLocalAgentStore`
+в globalStorage расширения (без зависимости от `node:sqlite`).
+
+## Чат-провайдеры: Hermes, OpenAI, Anthropic, Cursor
 
 Для этих провайдеров XPlain сам превращает контекст в диалог (`src/agent/prompt.ts`):
 
@@ -266,7 +275,7 @@ Authorization: Bearer <ключ>                       # если задан к�
 
 | Провайдер | Что делает |
 | --- | --- |
-| `hermes`, `openai`, `anthropic` | тот же список моделей; сообщает их число и есть ли среди них выбранная |
+| `hermes`, `openai`, `anthropic`, `cursor` | список моделей; сообщает их число и есть ли среди них выбранная |
 | `xplain` | Отправляет короткий запрос-«ping» с пустым `items` и ждёт любой валидный ответ |
 | `mock` | Всегда успешно |
 

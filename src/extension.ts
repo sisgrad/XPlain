@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import { ContextDraft } from './context/ContextDraft';
+import { readContextPrefs } from './context/ContextPrefs';
 import { AnchorDecorations } from './editor/decorations';
 import { LiveAnchors } from './editor/LiveAnchors';
 import { PickMode } from './editor/pickMode';
@@ -36,6 +37,10 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   }
 
   const draft = new ContextDraft();
+  const prefs = readContextPrefs(context.workspaceState);
+  // Drop a stale template id if that template no longer exists in this workspace.
+  const templateId = prefs.templateId && store?.getTemplate(prefs.templateId) ? prefs.templateId : null;
+  draft.restorePrefs({ ...prefs, templateId });
   const pickMode = new PickMode();
   const view = new XplainViewProvider(context, () => (storeFs ? [storeFs.uri('')] : []));
   const background = new BackgroundManager(context, store, storeFs);

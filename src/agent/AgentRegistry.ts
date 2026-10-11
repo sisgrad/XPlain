@@ -14,6 +14,7 @@ import {
 } from '../shared/types';
 import { AgentError, type AgentProvider } from './AgentProvider';
 import { AnthropicProvider, listAnthropicModels } from './AnthropicProvider';
+import { CursorSdkProvider, cursorSdkStoreDir, listCursorModels } from './CursorSdkProvider';
 import { describeDashboardMistake, originOf, probeDashboard } from './hermesHints';
 import { HttpAgentProvider } from './HttpAgentProvider';
 import { MockAgentProvider } from './MockAgentProvider';
@@ -22,11 +23,15 @@ import { listOpenAIModels, OpenAIChatProvider } from './OpenAIChatProvider';
 const SECTION = 'xplain.agent';
 const LEGACY_SECRET = 'xplain.agent.apiKey';
 
+/** Sentinel "base URL" for AgentModelsResult matching (Cursor has no HTTP base). */
+export const CURSOR_MODELS_BASE = 'cursor://sdk';
+
 export const PROVIDER_LABELS: Record<AgentProviderId, string> = {
   xplain: 'XPlain HTTP agent',
   hermes: 'Hermes Agent',
   openai: 'OpenAI / Codex',
   anthropic: 'Anthropic (Claude)',
+  cursor: 'Cursor SDK',
   mock: 'Mock (offline)',
 };
 
@@ -40,6 +45,7 @@ export const DEFAULT_SETTINGS: AgentSettings = {
   hermes: { baseUrl: 'http://127.0.0.1:8642/v1', model: 'hermes-agent' },
   openai: { baseUrl: 'https://api.openai.com/v1', model: 'chat-latest' },
   anthropic: { baseUrl: 'https://api.anthropic.com', model: 'claude-sonnet-5', maxTokens: 8192 },
+  cursor: { model: 'composer-2.5' },
 };
 
 export function normalizeProviderId(value: unknown): AgentProviderId {
@@ -75,6 +81,9 @@ export class AgentRegistry {
         model: cfg.get<string>('anthropic.model', d.anthropic.model),
         maxTokens: cfg.get<number>('anthropic.maxTokens', d.anthropic.maxTokens),
       },
+      cursor: {
+        model: cfg.get<string>('cursor.model', d.cursor.model),
+      },
     };
   }
 
@@ -105,6 +114,7 @@ export class AgentRegistry {
       ['anthropic.baseUrl', settings.anthropic.baseUrl.trim(), d.anthropic.baseUrl],
       ['anthropic.model', settings.anthropic.model.trim(), d.anthropic.model],
       ['anthropic.maxTokens', clampInt(settings.anthropic.maxTokens, 256, 200_000, d.anthropic.maxTokens), d.anthropic.maxTokens],
+      ['cursor.model', settings.cursor.model.trim(), d.cursor.model],
     ];
     for (const [key, value, def] of entries) {
       // Writing the default removes the explicit entry to keep settings.json tidy,
@@ -187,6 +197,15 @@ export class AgentRegistry {
           headers: settings.headers,
           systemPrompt: settings.systemPrompt,
         }));
+      case 'cursor':
+        return new CursorSdkProvider(async () => ({
+          model: settings.cursor.model,
+          apiKey: await this.getKey('cursor'),
+          systemPrompt: settings.systemPrompt,
+          cwd: vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? '',
+          storeDir: cursorSdkStoreDir(this.context.globalStorageUri.fsPath),
+          streaming: settings.streaming,
+        }));
       case 'xplain':
       default:
         return new HttpAgentProvider(async () => ({
@@ -208,6 +227,8 @@ export class AgentRegistry {
         return `${PROVIDER_LABELS.openai} · ${settings.openai.model || 'model not set'}`;
       case 'anthropic':
         return `${PROVIDER_LABELS.anthropic} · ${settings.anthropic.model || 'model not set'}`;
+      case 'cursor':
+        return `${PROVIDER_LABELS.cursor} · ${settings.cursor.model || 'model not set'}`;
       case 'mock':
         return PROVIDER_LABELS.mock;
       default:
@@ -217,12 +238,20 @@ export class AgentRegistry {
 
   /* --------------------------------------------------------------- models */
 
-  /** Ask the provider's server which models it offers (hermes/openai/anthropic only). */
+  /** Ask the provider which models it offers (hermes/openai/anthropic/cursor). */
   async listModels(settings: AgentSettings, requestId = 0): Promise<AgentModelsResult> {
     const provider = settings.provider;
     const timeoutMs = Math.min(minutesToMs(settings.timeoutMinutes), 15_000);
     const signal = AbortSignal.timeout(timeoutMs);
     const base = { requestId, provider, models: [] as string[] };
+    if (provider === 'cursor') {
+      try {
+        const models = await listCursorModels(await this.getKey('cursor'), signal);
+        return { ...base, baseUrl: CURSOR_MODELS_BASE, models };
+      } catch (err) {
+        return { ...base, baseUrl: CURSOR_MODELS_BASE, error: err instanceof Error ? err.message : String(err) };
+      }
+    }
     if (provider !== 'hermes' && provider !== 'openai' && provider !== 'anthropic') {
       return { ...base, baseUrl: '', error: 'This provider has no model list.' };
     }
@@ -291,6 +320,19 @@ export class AgentRegistry {
               ? ` "${s.model}" is available.`
               : ` Note: "${s.model}" is not in the list (may still work).`;
           return { provider, ok: true, models, message: `Connected to ${s.baseUrl}: ${models.length} model(s).${note}` };
+        }
+        case 'cursor': {
+          const list = await this.listModels(settings);
+          if (list.error) throw new AgentError(list.error);
+          const models = list.models;
+          const model = settings.cursor.model;
+          const has = models.includes(model);
+          const note = !model
+            ? ' Pick a model from the list.'
+            : has
+              ? ` "${model}" is available.`
+              : ` Note: "${model}" is not in the list (may still work).`;
+          return { provider, ok: true, models, message: `Cursor SDK: ${models.length} model(s).${note}` };
         }
         case 'xplain':
         default: {

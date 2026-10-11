@@ -9,7 +9,7 @@
 
 | Ключ | Тип / значения | По умолчанию | Описание |
 | --- | --- | --- | --- |
-| `xplain.agent.provider` | `xplain` \| `hermes` \| `openai` \| `anthropic` \| `mock` | `xplain` | Кто отвечает на запросы. Устаревшее значение `http` читается как `xplain` |
+| `xplain.agent.provider` | `xplain` \| `hermes` \| `openai` \| `anthropic` \| `cursor` \| `mock` | `xplain` | Кто отвечает на запросы. Устаревшее значение `http` читается как `xplain` |
 | `xplain.agent.endpoint` | string (URL) | `http://127.0.0.1:8765/explain` | [xplain] Адрес, на который отправляется `POST` с контекстом |
 | `xplain.agent.hermes.baseUrl` | string (URL) | `http://127.0.0.1:8642/v1` | [hermes] Base URL API-сервера Hermes (с `/v1`) |
 | `xplain.agent.hermes.model` | string | `hermes-agent` | [hermes] Модель/профиль |
@@ -18,7 +18,8 @@
 | `xplain.agent.anthropic.baseUrl` | string (URL) | `https://api.anthropic.com` | [anthropic] Base URL |
 | `xplain.agent.anthropic.model` | string | `claude-sonnet-5` | [anthropic] Id модели Claude |
 | `xplain.agent.anthropic.maxTokens` | number ≥ 256 | `8192` | [anthropic] `max_tokens` ответа |
-| `xplain.agent.systemPrompt` | string (многострочная) | `""` | [hermes/openai/anthropic] Свой системный промпт; пусто — встроенный промпт XPlain |
+| `xplain.agent.systemPrompt` | string (многострочная) | `""` | [hermes/openai/anthropic/cursor] Свой системный промпт; пусто — встроенный промпт XPlain |
+| `xplain.agent.cursor.model` | string | `composer-2.5` | [cursor] Id модели Cursor Agent SDK |
 | `xplain.agent.timeoutMinutes` | number 1…180 | `10` | Idle-таймаут в **минутах**: ожидание заголовков, затем тишина между чанками тела. Любые байты (keepalive, tool-progress, delta) сбрасывают таймер. Прежнее `timeoutMs` при чтении мигрирует (округление вверх до минут) |
 | `xplain.agent.streaming` | boolean | `true` | Показывать ответ по мере поступления (NDJSON для `xplain`, SSE для остальных) |
 | `xplain.agent.headers` | object (string → string) | `{}` | Дополнительные HTTP-заголовки для любого провайдера. Ключи API сюда не кладите — см. «Секреты» |

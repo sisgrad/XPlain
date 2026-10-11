@@ -4,7 +4,6 @@ src/**
 webview/**
 test/**
 out/**
-node_modules/**
 scripts/**
 debug_samples/**
 examples/**
@@ -16,3 +15,33 @@ tsconfig*.json
 esbuild.mjs
 **/*.map
 dist/**/*.map
+dist/_sdk_probe.js
+
+# Already bundled into dist/ — do not ship again (nor their transitive deps).
+node_modules/preact/**
+node_modules/highlight.js/**
+node_modules/markdown-it/**
+node_modules/@vscode/**
+node_modules/argparse/**
+node_modules/entities/**
+node_modules/linkify-it/**
+node_modules/mdurl/**
+node_modules/punycode.js/**
+node_modules/uc.micro/**
+
+# Cursor SDK: ship CJS runtime only (main export), skip ESM/bundled/types.
+node_modules/@cursor/sdk/dist/esm/**
+node_modules/@cursor/sdk/dist/bundled/**
+node_modules/@cursor/sdk/**/*.d.ts
+node_modules/@cursor/sdk/**/*.map
+node_modules/@cursor/sdk/README.md
+
+# Dev / unused trees (keep @cursor/sdk + its runtime deps).
+node_modules/@types/**
+node_modules/typescript/**
+node_modules/eslint/**
+node_modules/@typescript-eslint/**
+node_modules/mocha/**
+node_modules/esbuild/**
+node_modules/@vscode/vsce/**
+node_modules/.bin/**

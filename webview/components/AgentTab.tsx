@@ -13,6 +13,9 @@ interface Props {
 
 type ChatProviderId = 'hermes' | 'openai' | 'anthropic';
 const isChat = (p: AgentProviderId): p is ChatProviderId => p === 'hermes' || p === 'openai' || p === 'anthropic';
+const hasModelList = (p: AgentProviderId): boolean => isChat(p) || p === 'cursor';
+/** Matches AgentRegistry.CURSOR_MODELS_BASE for listModels result matching. */
+const CURSOR_MODELS_BASE = 'cursor://sdk';
 
 let modelsRequestSeq = 0;
 
@@ -43,6 +46,12 @@ const PROVIDERS: Record<AgentProviderId, ProviderInfo> = {
     keyHelp: 'OpenAI API key (sk-…). Sent as "Authorization: Bearer <key>". Optional for local servers.',
     keyRequired: false,
   },
+  cursor: {
+    label: 'Cursor SDK',
+    summary: 'Runs a Cursor agent locally against this workspace via @cursor/sdk (Composer / account models). Needs a Cursor API key.',
+    keyHelp: 'Cursor user API key from cursor.com/dashboard/integrations (or a team service-account key).',
+    keyRequired: true,
+  },
   xplain: {
     label: 'XPlain HTTP agent',
     summary: 'Your own agent service speaking the XPlain contract (POST JSON, reply JSON or NDJSON stream). See docs/04-agent-api.md.',
@@ -57,7 +66,7 @@ const PROVIDERS: Record<AgentProviderId, ProviderInfo> = {
   },
 };
 
-const ORDER: AgentProviderId[] = ['hermes', 'anthropic', 'openai', 'xplain', 'mock'];
+const ORDER: AgentProviderId[] = ['hermes', 'anthropic', 'openai', 'cursor', 'xplain', 'mock'];
 
 export function AgentTab({ settings, test, testing, onTestStart, models: modelsResult }: Props) {
   const [form, setForm] = useState<AgentSettings | null>(null);
@@ -84,18 +93,21 @@ export function AgentTab({ settings, test, testing, onTestStart, models: modelsR
   const info = PROVIDERS[provider];
   const hasKey = settings?.hasKey[provider] ?? false;
   const chatBaseUrl = form && isChat(provider) ? form[provider].baseUrl.trim() : '';
+  const modelsBaseUrl = provider === 'cursor' ? CURSOR_MODELS_BASE : chatBaseUrl;
   const hasKeyForProvider = settings?.hasKey[provider] ?? false;
+  const currentModel = form ? (provider === 'cursor' ? form.cursor.model : isChat(provider) ? form[provider].model : '') : '';
 
-  // Load the model list from the server whenever the provider, its base URL or the stored key changes.
+  // Load the model list whenever the provider, base URL or stored key changes.
   const requestModels = (settingsForRequest: AgentSettings) => {
     const requestId = ++modelsRequestSeq;
     setPendingModels(requestId);
     post({ type: 'listModels', settings: settingsForRequest, requestId });
   };
   useEffect(() => {
-    if (!form || !isChat(provider)) return;
-    if (!chatBaseUrl) return;
-    const t = window.setTimeout(() => requestModels(form), 400); // debounce typing in Base URL
+    if (!form || !hasModelList(provider)) return;
+    if (isChat(provider) && !chatBaseUrl) return;
+    if (provider === 'cursor' && !hasKeyForProvider) return;
+    const t = window.setTimeout(() => requestModels(form), 400);
     return () => window.clearTimeout(t);
   }, [provider, chatBaseUrl, hasKeyForProvider, form !== null]);
   useEffect(() => {
@@ -104,7 +116,7 @@ export function AgentTab({ settings, test, testing, onTestStart, models: modelsR
   useEffect(() => setManualModel(false), [provider]);
 
   // Only trust a list that matches what the form currently points at.
-  const listCurrent = Boolean(modelsResult && modelsResult.provider === provider && modelsResult.baseUrl === chatBaseUrl);
+  const listCurrent = Boolean(modelsResult && modelsResult.provider === provider && modelsResult.baseUrl === modelsBaseUrl);
   const models = useMemo(() => (listCurrent ? modelsResult!.models : []), [listCurrent, modelsResult]);
   const modelsError = listCurrent ? modelsResult!.error : undefined;
   const loadingModels = pendingModels !== null;
@@ -125,6 +137,14 @@ export function AgentTab({ settings, test, testing, onTestStart, models: modelsR
   const updateChat = (id: 'hermes' | 'openai' | 'anthropic', patch: Record<string, string | number>) => {
     setForm((f) => (f ? { ...f, [id]: { ...f[id], ...patch } } : f));
     setDirty(true);
+  };
+  const updateCursor = (patch: { model?: string }) => {
+    setForm((f) => (f ? { ...f, cursor: { ...f.cursor, ...patch } } : f));
+    setDirty(true);
+  };
+  const setModel = (model: string) => {
+    if (provider === 'cursor') updateCursor({ model });
+    else if (isChat(provider)) updateChat(provider, { model });
   };
 
   const parsedHeaders = () => {
@@ -159,7 +179,7 @@ export function AgentTab({ settings, test, testing, onTestStart, models: modelsR
     if (!headers) return;
     onTestStart();
     post({ type: 'testAgent', settings: { ...form, headers } });
-    if (isChat(provider) && chatBaseUrl) requestModels({ ...form, headers });
+    if (hasModelList(provider) && (provider === 'cursor' || chatBaseUrl)) requestModels({ ...form, headers });
   };
 
   const saveKey = () => {
@@ -191,37 +211,48 @@ export function AgentTab({ settings, test, testing, onTestStart, models: modelsR
         </section>
       )}
 
-      {(provider === 'hermes' || provider === 'openai' || provider === 'anthropic') && (
+      {(isChat(provider) || provider === 'cursor') && (
         <section class="section">
-          <Field label="Base URL">
-            <input
-              class="input"
-              type="url"
-              value={form[provider].baseUrl}
-              placeholder={provider === 'anthropic' ? 'https://api.anthropic.com' : provider === 'hermes' ? 'http://127.0.0.1:8642/v1' : 'https://api.openai.com/v1'}
-              onInput={(e) => updateChat(provider, { baseUrl: val(e) })}
-            />
-          </Field>
-          <Field label={provider === 'hermes' ? 'Model / profile (from the harness)' : 'Model (from the server)'}>
+          {isChat(provider) && (
+            <Field label="Base URL">
+              <input
+                class="input"
+                type="url"
+                value={form[provider].baseUrl}
+                placeholder={provider === 'anthropic' ? 'https://api.anthropic.com' : provider === 'hermes' ? 'http://127.0.0.1:8642/v1' : 'https://api.openai.com/v1'}
+                onInput={(e) => updateChat(provider, { baseUrl: val(e) })}
+              />
+            </Field>
+          )}
+          {provider === 'cursor' && (
+            <p class="small muted">Runs locally against the open workspace folder via the Cursor Agent SDK. Model list comes from your Cursor account.</p>
+          )}
+          <Field
+            label={
+              provider === 'hermes' ? 'Model / profile (from the harness)' : provider === 'cursor' ? 'Model (from Cursor account)' : 'Model (from the server)'
+            }
+          >
             <div class="row">
               {manualModel || (models.length === 0 && !loadingModels) ? (
                 <input
                   class="input"
                   type="text"
-                  value={form[provider].model}
-                  placeholder={provider === 'hermes' ? 'hermes-agent' : provider === 'anthropic' ? 'claude-sonnet-5' : 'chat-latest'}
-                  onInput={(e) => updateChat(provider, { model: val(e) })}
+                  value={currentModel}
+                  placeholder={
+                    provider === 'hermes' ? 'hermes-agent' : provider === 'anthropic' ? 'claude-sonnet-5' : provider === 'cursor' ? 'composer-2.5' : 'chat-latest'
+                  }
+                  onInput={(e) => setModel(val(e))}
                 />
               ) : (
                 <select
                   class="select"
-                  value={form[provider].model}
+                  value={currentModel}
                   disabled={loadingModels && models.length === 0}
-                  onChange={(e) => updateChat(provider, { model: (e.target as HTMLSelectElement).value })}
+                  onChange={(e) => setModel((e.target as HTMLSelectElement).value)}
                 >
-                  {!form[provider].model && <option value="">— select a model —</option>}
-                  {form[provider].model && !models.includes(form[provider].model) && (
-                    <option value={form[provider].model}>{form[provider].model} (not in the server list)</option>
+                  {!currentModel && <option value="">— select a model —</option>}
+                  {currentModel && !models.includes(currentModel) && (
+                    <option value={currentModel}>{currentModel} (not in the server list)</option>
                   )}
                   {models.map((m) => (
                     <option value={m} key={m}>
@@ -232,8 +263,8 @@ export function AgentTab({ settings, test, testing, onTestStart, models: modelsR
               )}
               <button
                 class="icon-button"
-                title="Reload the model list from the server"
-                disabled={loadingModels || !chatBaseUrl}
+                title="Reload the model list"
+                disabled={loadingModels || (isChat(provider) && !chatBaseUrl) || (provider === 'cursor' && !hasKey)}
                 onClick={() => requestModels(form)}
               >
                 <span class={`codicon ${loadingModels ? 'codicon-loading codicon-modifier-spin' : 'codicon-refresh'}`} />
@@ -244,15 +275,21 @@ export function AgentTab({ settings, test, testing, onTestStart, models: modelsR
                 </button>
               )}
             </div>
-            {loadingModels && models.length === 0 && <p class="small muted">Loading models from {chatBaseUrl}…</p>}
+            {loadingModels && models.length === 0 && (
+              <p class="small muted">{provider === 'cursor' ? 'Loading models from Cursor…' : `Loading models from ${chatBaseUrl}…`}</p>
+            )}
             {!loadingModels && modelsError && (
               <p class="small error">
                 Could not load models: {modelsError}
-                {provider !== 'openai' && !hasKey ? ' Save the API key first.' : ''} You can type the id manually.
+                {(provider === 'anthropic' || provider === 'cursor') && !hasKey ? ' Save the API key first.' : ''} You can type the id manually.
               </p>
             )}
-            {!loadingModels && !modelsError && listCurrent && models.length === 0 && <p class="small muted">The server returned no models.</p>}
-            {!loadingModels && models.length > 0 && <p class="small muted">{models.length} model(s) available at {chatBaseUrl}.</p>}
+            {!loadingModels && !modelsError && listCurrent && models.length === 0 && <p class="small muted">No models returned.</p>}
+            {!loadingModels && models.length > 0 && (
+              <p class="small muted">
+                {models.length} model(s) available{provider === 'cursor' ? '' : ` at ${chatBaseUrl}`}.
+              </p>
+            )}
           </Field>
           {provider === 'anthropic' && (
             <Field label="max_tokens">
@@ -331,18 +368,20 @@ export function AgentTab({ settings, test, testing, onTestStart, models: modelsR
               />
             </Field>
           )}
-          <Field label="Extra HTTP headers (one per line: Name: value)">
-            <textarea
-              rows={2}
-              value={headersText}
-              placeholder={'X-Org: my-team'}
-              onInput={(e) => {
-                setHeadersText((e.target as HTMLTextAreaElement).value);
-                setDirty(true);
-              }}
-            />
-            {headersError && <p class="small error">{headersError}</p>}
-          </Field>
+          {provider !== 'cursor' && (
+            <Field label="Extra HTTP headers (one per line: Name: value)">
+              <textarea
+                rows={2}
+                value={headersText}
+                placeholder={'X-Org: my-team'}
+                onInput={(e) => {
+                  setHeadersText((e.target as HTMLTextAreaElement).value);
+                  setDirty(true);
+                }}
+              />
+              {headersError && <p class="small error">{headersError}</p>}
+            </Field>
+          )}
         </details>
       )}
 
@@ -406,6 +445,7 @@ function stripView(v: AgentSettingsView): AgentSettings {
     hermes: { ...v.hermes },
     openai: { ...v.openai },
     anthropic: { ...v.anthropic },
+    cursor: { ...v.cursor },
   };
 }
 

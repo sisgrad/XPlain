@@ -65,17 +65,35 @@ describe('ContextDraft', () => {
     assert.ok(item.kind === 'code' && item.startLine === 70 && item.endLine === 233);
   });
 
-  it('keeps explain language and Excalidraw flag across clear', () => {
+  it('keeps template, explain language and Excalidraw flag across clear', () => {
     const d = new ContextDraft();
     assert.equal(d.snapshot.explainLanguage, 'en');
     assert.equal(d.snapshot.useExcalidraw, false);
     d.setExplainLanguage('ru');
     d.setUseExcalidraw(true);
+    d.setTemplate('tpl-1');
+    d.setQuestion('forget me');
     d.add(code);
     d.clear();
     assert.equal(d.snapshot.items.length, 0);
+    assert.equal(d.snapshot.question, '');
+    assert.equal(d.snapshot.templateId, 'tpl-1');
     assert.equal(d.snapshot.explainLanguage, 'ru');
     assert.equal(d.snapshot.useExcalidraw, true);
+  });
+
+  it('restores persisted Context prefs', () => {
+    const d = new ContextDraft();
+    d.restorePrefs({ templateId: 't', explainLanguage: 'ru', useExcalidraw: true });
+    assert.deepEqual(
+      {
+        templateId: d.snapshot.templateId,
+        explainLanguage: d.snapshot.explainLanguage,
+        useExcalidraw: d.snapshot.useExcalidraw,
+        question: d.snapshot.question,
+      },
+      { templateId: 't', explainLanguage: 'ru', useExcalidraw: true, question: '' },
+    );
   });
 });
 

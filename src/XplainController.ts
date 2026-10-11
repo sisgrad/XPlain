@@ -9,6 +9,7 @@ import { AgentRegistry, PROVIDER_LABELS } from './agent/AgentRegistry';
 import { inlineLocalAssets } from './agent/inlineAssets';
 import { deriveTitle } from './agent/titles';
 import { ContextDraft } from './context/ContextDraft';
+import { writeContextPrefs } from './context/ContextPrefs';
 import { ensureExcalidrawSkillInstalled, EXCALIDRAW_SKILL_WORKSPACE_PATH } from './skills/excalidraw';
 import { formatRange } from './editor/anchors';
 import { toRange } from './editor/decorations';
@@ -594,12 +595,15 @@ export class XplainController implements vscode.Disposable {
           break;
         case 'setTemplate':
           this.d.draft.setTemplate(m.templateId);
+          void this.persistContextPrefs();
           break;
         case 'setExplainLanguage':
           this.d.draft.setExplainLanguage(m.language);
+          void this.persistContextPrefs();
           break;
         case 'setUseExcalidraw':
           this.d.draft.setUseExcalidraw(m.enabled);
+          void this.persistContextPrefs();
           break;
         case 'removeItem':
           this.d.draft.removeAt(m.index);
@@ -779,6 +783,15 @@ export class XplainController implements vscode.Disposable {
     );
   }
 
+  private async persistContextPrefs(): Promise<void> {
+    const s = this.d.draft.snapshot;
+    await writeContextPrefs(this.d.context.workspaceState, {
+      templateId: s.templateId,
+      explainLanguage: s.explainLanguage,
+      useExcalidraw: s.useExcalidraw,
+    });
+  }
+
   dispose(): void {
     this.cancel();
     void vscode.commands.executeCommand('setContext', 'xplain.busy', false);
@@ -794,13 +807,17 @@ function agentEndpoint(s: AgentSettings): string | undefined {
     case 'openai':
     case 'anthropic':
       return s[s.provider].baseUrl;
+    case 'cursor':
+      return 'cursor://sdk';
     default:
       return undefined;
   }
 }
 
 function agentModel(s: AgentSettings): string | undefined {
-  return s.provider === 'hermes' || s.provider === 'openai' || s.provider === 'anthropic' ? s[s.provider].model : undefined;
+  if (s.provider === 'hermes' || s.provider === 'openai' || s.provider === 'anthropic') return s[s.provider].model;
+  if (s.provider === 'cursor') return s.cursor.model;
+  return undefined;
 }
 
 function safeParseUri(s: string): vscode.Uri | undefined {
