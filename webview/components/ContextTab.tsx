@@ -149,7 +149,10 @@ export function ContextTab({ draft, templates, busy, agentLabel, pickMode, onCon
             ))}
           </select>
         </Field>
-        <label class="check options-check" title="Installs the Excalidraw Diagram skill into .cursor/skills/ and .claude/skills/ and asks the agent to use it">
+        <label
+          class="check options-check"
+          title="Stores the Excalidraw Diagram skill in .xplain/skills/ and exposes it to the selected agent (Cursor/Claude bridge when needed)"
+        >
           <input
             type="checkbox"
             checked={draft.useExcalidraw}
@@ -157,7 +160,7 @@ export function ContextTab({ draft, templates, busy, agentLabel, pickMode, onCon
           />
           <span>
             Draw diagrams with the <strong>Excalidraw</strong> skill
-            <span class="muted"> · installs into .cursor/skills/ and .claude/skills/ if needed</span>
+            <span class="muted"> · stored in .xplain/skills/, adapted per agent</span>
           </span>
         </label>
         {draft.useExcalidraw && (

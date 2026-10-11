@@ -12,6 +12,8 @@
     <sessionId>/
       context.json                # что было отправлено, заголовок, статус, ошибка
       result.html                 # ответ агента (self-contained HTML; старые result.md ещё читаются)
+  skills/
+    <skillId>/                    # агент-агностичное хранилище скиллов (напр. excalidraw-diagram)
   templates/
     <templateId>/
       template.json               # имя, инструкция, список файлов

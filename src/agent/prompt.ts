@@ -54,7 +54,14 @@ export function buildChatPrompt(request: AgentRequest, systemPrompt?: string): C
   parts.push(languageInstruction(request.explainLanguage));
   parts.push(HTML_OUTPUT_INSTRUCTION);
   if (request.useExcalidraw) {
-    parts.push(excalidrawAgentInstructions(request.excalidrawSkillPath, request.workspaceRoot));
+    parts.push(
+      excalidrawAgentInstructions({
+        agentPath: request.excalidrawSkillPath,
+        canonicalPath: request.excalidrawSkillCanonicalPath,
+        workspaceRoot: request.workspaceRoot,
+        bridge: request.excalidrawSkillBridge,
+      }),
+    );
   }
 
   for (const t of templates) {

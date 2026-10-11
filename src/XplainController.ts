@@ -11,7 +11,7 @@ import { recoverHtmlAnswer } from './agent/recoverHtml';
 import { deriveTitle } from './agent/titles';
 import { ContextDraft } from './context/ContextDraft';
 import { writeContextPrefs } from './context/ContextPrefs';
-import { ensureExcalidrawSkillInstalled, EXCALIDRAW_SKILL_WORKSPACE_PATH } from './skills/excalidraw';
+import { EXCALIDRAW_SKILL_CANONICAL_PATH, prepareExcalidrawSkillForProvider } from './skills/excalidraw';
 import { formatRange } from './editor/anchors';
 import { toRange } from './editor/decorations';
 import { LiveAnchors } from './editor/LiveAnchors';
@@ -201,11 +201,18 @@ export class XplainController implements vscode.Disposable {
     const provider = this.agents.provider(settings);
 
     let excalidrawSkillPath: string | undefined;
+    let excalidrawSkillCanonicalPath: string | undefined;
+    let excalidrawSkillBridge: 'cursor' | 'claude' | 'none' | undefined;
     if (draft.useExcalidraw) {
       try {
-        excalidrawSkillPath = await ensureExcalidrawSkillInstalled(this.d.context.extensionUri);
+        const skill = await prepareExcalidrawSkillForProvider(this.d.context.extensionUri, settings.provider);
+        excalidrawSkillPath = skill.agentPath;
+        excalidrawSkillCanonicalPath = skill.canonicalPath;
+        excalidrawSkillBridge = skill.bridge;
         this.d.output.appendLine(
-          `[skills] installed Excalidraw skill → ${excalidrawSkillPath} and .cursor/skills/excalidraw-diagram`,
+          skill.bridge === 'none'
+            ? `[skills] Excalidraw ready at ${skill.canonicalPath} (prompt-only for ${provider.id})`
+            : `[skills] Excalidraw store ${skill.canonicalPath} → bridge ${skill.agentPath} for ${provider.id}`,
         );
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
@@ -237,7 +244,11 @@ export class XplainController implements vscode.Disposable {
       workspaceRoot: folder?.uri.fsPath,
       explainLanguage: draft.explainLanguage,
       useExcalidraw: draft.useExcalidraw,
-      excalidrawSkillPath: draft.useExcalidraw ? excalidrawSkillPath ?? EXCALIDRAW_SKILL_WORKSPACE_PATH : undefined,
+      excalidrawSkillPath: draft.useExcalidraw ? excalidrawSkillPath ?? EXCALIDRAW_SKILL_CANONICAL_PATH : undefined,
+      excalidrawSkillCanonicalPath: draft.useExcalidraw
+        ? excalidrawSkillCanonicalPath ?? EXCALIDRAW_SKILL_CANONICAL_PATH
+        : undefined,
+      excalidrawSkillBridge: draft.useExcalidraw ? excalidrawSkillBridge ?? 'none' : undefined,
     };
     this.d.output.appendLine(
       `[send] session ${session.id} via ${provider.id}: ${agentItems.length} item(s), lang=${draft.explainLanguage}` +

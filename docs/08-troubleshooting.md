@@ -113,10 +113,9 @@ dashboard с cookie-аутентификацией; XPlain работает с �
 ## Cursor SDK не использует Excalidraw skill
 
 1. В Context должен быть включён чекбокс **Draw diagrams with the Excalidraw skill**.
-2. До фикса XPlain ставил skill только в `.claude/skills/…`, а Cursor SDK по умолчанию
-   **не загружает** project skills (`settingSources: []`). Теперь skill копируется ещё и в
-   `.cursor/skills/excalidraw-diagram/`, а локальный агент создаётся с `settingSources: ['project']`.
-3. В Output → XPlain при Send должна быть строка `[skills] installed Excalidraw skill → …`.
+2. Скиллы живут в `.xplain/skills/…`. Для Cursor при Send создаётся bridge `.cursor/skills/…`, а агент
+   запускается с `settingSources: ['project']` (иначе SDK не видит project skills).
+3. В Output → XPlain: `[skills] Excalidraw store .xplain/skills/… → bridge .cursor/skills/… for cursor`.
 
 ## Cursor SDK вернул короткий текст вместо HTML
 

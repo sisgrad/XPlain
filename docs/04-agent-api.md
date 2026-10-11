@@ -129,17 +129,19 @@ Authorization: Bearer <ключ>                       # если задан к�
   "workspace": "XPlain",              // имя папки проекта (опционально)
   "explainLanguage": "en",            // "en" | "ru" — язык письменного ответа
   "useExcalidraw": false,             // true → агент обязан использовать Excalidraw-скилл
-  "excalidrawSkillPath": ".claude/skills/excalidraw-diagram",  // только при useExcalidraw
+  "excalidrawSkillPath": ".cursor/skills/excalidraw-diagram",        // путь для агента (bridge или store)
+  "excalidrawSkillCanonicalPath": ".xplain/skills/excalidraw-diagram", // устойчивое хранилище
+  "excalidrawSkillBridge": "cursor",  // "cursor" | "claude" | "none"
   "items": [ /* в порядке, заданном пользователем */ ]
 }
 ```
 
-Поля `explainLanguage` / `useExcalidraw` / `excalidrawSkillPath` выставляются вкладкой Context.
-Для чат-провайдеров (Hermes / OpenAI / Anthropic) XPlain дополнительно вшивает секции `## Language` и
-(при включённых диаграммах) `## Diagrams` в user-сообщение; для контракта `xplain` сервис должен читать
-эти поля сам. Скилл лежит в репозитории расширения (`skills/excalidraw-diagram/`, upstream
-[coleam00/excalidraw-diagram-skill](https://github.com/coleam00/excalidraw-diagram-skill)) и перед
-отправкой копируется в workspace.
+Поля `explainLanguage` / `useExcalidraw` / skill-пути выставляются вкладкой Context и адаптируются под
+`provider` при Send. Канон всегда `.xplain/skills/<id>/`; для Cursor/Hermes/Anthropic при необходимости
+создаётся discovery-bridge (`.cursor/skills/` или `.claude/skills/`). Для чат-провайдеров XPlain
+вшивает секции `## Language` / `## Diagrams` в user-сообщение; контракт `xplain` читает поля сам.
+Upstream-скилл: `skills/excalidraw-diagram/` в расширении
+([coleam00/excalidraw-diagram-skill](https://github.com/coleam00/excalidraw-diagram-skill)).
 
 #### Элементы `items`
 

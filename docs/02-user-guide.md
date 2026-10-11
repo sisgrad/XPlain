@@ -49,11 +49,11 @@
   инструкцию и файлы. Иконка «карандаш» открывает шаблон для редактирования.
 - **Explanation language** — язык ответа агента: *English* или *Russian*. Идентификаторы кода, пути
   файлов и ссылки на строки (`L12-L48`) остаются без перевода.
-- **Draw diagrams with the Excalidraw skill** — чекбокс. Когда отмечен, перед отправкой XPlain копирует
-  в проект скилл [excalidraw-diagram-skill](https://github.com/coleam00/excalidraw-diagram-skill)
-  в `.cursor/skills/excalidraw-diagram/` и `.claude/skills/excalidraw-diagram/`, просит агента
-  прочитать `SKILL.md` и нарисовать диаграммы (обычно в `.xplain/diagrams/`). Для Cursor SDK дополнительно
-  включается загрузка project skills (`settingSources: project`).
+- **Draw diagrams with the Excalidraw skill** — чекбокс. Когда отмечен, перед отправкой XPlain кладёт
+  скилл [excalidraw-diagram-skill](https://github.com/coleam00/excalidraw-diagram-skill) в
+  **`.xplain/skills/excalidraw-diagram/`** (агент-агностичное хранилище) и в runtime адаптирует его под
+  выбранного агента: для Cursor — bridge в `.cursor/skills/` + `settingSources: project`, для Hermes/Anthropic —
+  bridge в `.claude/skills/`, для остальных — путь к store в промпте. Диаграммы обычно пишутся в `.xplain/diagrams/`.
 
 Шаблон, язык и чекбокс диаграмм сохраняются между отправками, Clear context и перезагрузками окна
 (workspaceState). Текст вопроса после отправки/очистки не сохраняется.

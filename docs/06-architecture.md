@@ -47,7 +47,8 @@ flowchart LR
 | `agent/stream.ts` | Общие примитивы: `fetchWithTimeout` (idle-таймаут, сброс на каждом чанке тела), `withActivityBump`, `readLines` (NDJSON), `readSse` (SSE), `joinUrl` |
 | `agent/prompt.ts` | `buildChatPrompt`: язык + (опц.) диаграммы + шаблон → результаты → Scope/Focus blocks + Full files (context) → вопрос; `DEFAULT_SYSTEM_PROMPT`, `detectHtml` |
 | `skills/excalidrawInstructions.ts` | Текст инструкций для агента (без `vscode`) |
-| `skills/excalidraw.ts` | Копирование bundled-скилла `skills/excalidraw-diagram/` → `.claude/skills/excalidraw-diagram/` |
+| `skills/skillStore.ts` | Durable store `.xplain/skills/<id>/` + runtime bridge под агента (`.cursor/` / `.claude/`) |
+| `skills/excalidraw.ts` | Обёртка Excalidraw: `prepareExcalidrawSkillForProvider(provider)` |
 | `agent/HttpAgentProvider.ts` | Провайдер `xplain`: `fetch` к endpoint, JSON / NDJSON / SSE по контракту XPlain |
 | `agent/hermesHints.ts` | Распознавание типичной ошибки: Base URL указывает на Hermes dashboard, а не на API-сервер (`GET /api/status` → `gateway_platforms.api_server.listener_base`), текст подсказки с нужным адресом/портом |
 | `agent/OpenAIChatProvider.ts` | Провайдеры `hermes` и `openai`: Chat Completions, SSE-чанки, пропуск сторонних событий (`hermes.tool.progress`), `listOpenAIModels` |

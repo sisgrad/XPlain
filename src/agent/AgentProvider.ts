@@ -42,8 +42,15 @@ export interface AgentRequest {
   explainLanguage?: ExplainLanguage;
   /** When true, the agent must use the Excalidraw Diagram skill. */
   useExcalidraw?: boolean;
-  /** Workspace-relative path where XPlain installed the skill (when useExcalidraw). */
+  /**
+   * Path the agent should open for this request (may be a provider bridge like
+   * `.cursor/skills/…` or the durable `.xplain/skills/…` store).
+   */
   excalidrawSkillPath?: string;
+  /** Durable agent-agnostic store path (always `.xplain/skills/excalidraw-diagram`). */
+  excalidrawSkillCanonicalPath?: string;
+  /** How the skill was exposed for this provider (`none` = prompt path only). */
+  excalidrawSkillBridge?: 'cursor' | 'claude' | 'none';
 }
 
 export interface AgentResponse {

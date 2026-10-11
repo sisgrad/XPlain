@@ -27,7 +27,7 @@ architecture, development, troubleshooting) lives in the `docs/` folder of the r
 2. In the panel, optionally type a question, pick a template, choose the explanation language
    (English / Russian), and optionally enable **Draw diagrams with the Excalidraw skill**
    ([coleam00/excalidraw-diagram-skill](https://github.com/coleam00/excalidraw-diagram-skill) —
-   XPlain installs it into `.claude/skills/` on send).
+   XPlain stores it in `.xplain/skills/` and adapts it for the selected agent on send).
 3. Press **Send to agent** (or Ctrl+Enter in the question box). Nothing is sent until you confirm.
 4. The answer streams into the **Result** tab and is saved as a self-contained
    `.xplain/sessions/<id>/result.html` (Markdown is wrapped into HTML; local diagram files
