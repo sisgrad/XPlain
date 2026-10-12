@@ -18,4 +18,4 @@ Anthropic (Claude), OpenAI / Codex, собственный сервис по к�
 | [07-development.md](07-development.md) | разработчик расширения | Сборка, тесты, отладка (F5), выпуск `.vsix` |
 | [08-troubleshooting.md](08-troubleshooting.md) | все | Типичные проблемы и их решение |
 
-Краткое описание проекта и контракта на английском — в корневом [README.md](../README.md).
+Краткое описание проекта и контракта — в корневом [README.md](../README.md) (русский) и [README.en.md](../README.en.md) (английский).
