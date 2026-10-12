@@ -1,16 +1,19 @@
+import { BrandMark } from './BrandMark';
 import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
-import type { BusyState } from '@shared/types';
+import type { BusyState, SessionDriftSummary } from '@shared/types';
 import type { ResultView } from '../App';
 import { renderMarkdown } from '../markdown';
 import { post } from '../vscode';
+import { DriftChip } from './DriftChip';
 
 interface Props {
   result: ResultView | null;
   stream: { sessionId: string; title: string; text: string } | null;
   busy: BusyState;
+  drift?: SessionDriftSummary;
 }
 
-export function ResultTab({ result, stream, busy }: Props) {
+export function ResultTab({ result, stream, busy, drift }: Props) {
   if (stream && (!result || result.session.id !== stream.sessionId)) {
     return (
       <div class="result-tab">
@@ -32,17 +35,30 @@ export function ResultTab({ result, stream, busy }: Props) {
   if (!result) {
     return (
       <div class="hint centered">
-        <span class="codicon codicon-book big" />
+        <BrandMark class="hero" size={96} variant="detail" />
         <p>No explanation open. Click an <em>XPlain</em> CodeLens above a code block, or pick one from History.</p>
       </div>
     );
   }
+
+  const pending = !!result.contentPending && !result.content.trim();
+  const drifted = !!drift && drift.level !== 'fresh' && result.session.status === 'done';
 
   return (
     <div class="result-tab">
       <div class="result-header">
         <EditableTitle sessionId={result.session.id} title={result.session.title} />
         <div class="result-actions">
+          {drifted && (
+            <button
+              class="button small"
+              title="Re-explain against the current code (sends the old explanation, the current code and a diff to the agent)"
+              disabled={busy.busy}
+              onClick={() => post({ type: 'refreshSession', sessionId: result.session.id })}
+            >
+              <span class="codicon codicon-sync" /> Refresh
+            </button>
+          )}
           {result.session.status === 'done' && (
             <button
               class="button secondary small"
@@ -52,6 +68,13 @@ export function ResultTab({ result, stream, busy }: Props) {
               <span class="codicon codicon-edit" /> Extend
             </button>
           )}
+          <button
+            class="button secondary small"
+            title="Save result.html / result.md to disk (does not wait for panel render)"
+            onClick={() => post({ type: 'downloadSession', sessionId: result.session.id })}
+          >
+            <span class="codicon codicon-desktop-download" /> Download
+          </button>
           <button class="icon-button" title="Add this explanation to the context" onClick={() => post({ type: 'addSessionToDraft', sessionId: result.session.id })}>
             <span class="codicon codicon-add" />
           </button>
@@ -64,8 +87,35 @@ export function ResultTab({ result, stream, busy }: Props) {
         {new Date(result.session.createdAt).toLocaleString()} · {result.session.anchorIds.length} block{result.session.anchorIds.length === 1 ? '' : 's'}
         {result.session.question.trim() && <div class="result-question">Q: {result.session.question}</div>}
       </div>
+      {drifted && drift && (
+        <div class={`drift-banner drift-${drift.level}`} role="status">
+          <span class={`codicon ${drift.level === 'drifted' ? 'codicon-edit' : 'codicon-warning'}`} />
+          <span class="drift-text">
+            {drift.level === 'lost'
+              ? 'The explained code could not be found in the current file(s).'
+              : `Code changed since this explanation: ${drift.changedLines} line${drift.changedLines === 1 ? '' : 's'} in ${drift.changedBlocks} of ${drift.blocks} block${drift.blocks === 1 ? '' : 's'}.`}
+            {drift.codeModifiedAt ? ` Code modified ${new Date(drift.codeModifiedAt).toLocaleString()}.` : ''}
+            <DriftChip drift={drift} compact />
+          </span>
+          <span class="drift-actions">
+            {drift.level !== 'lost' && (
+              <button class="link" onClick={() => post({ type: 'showCodeDiff', sessionId: result.session.id })}>
+                <span class="codicon codicon-diff" /> Show diff
+              </button>
+            )}
+            <button class="link" disabled={busy.busy} onClick={() => post({ type: 'refreshSession', sessionId: result.session.id })}>
+              <span class="codicon codicon-sync" /> Refresh
+            </button>
+          </span>
+        </div>
+      )}
       {result.format === 'html' ? (
-        result.content.trim() ? (
+        pending ? (
+          <div class="html-result-pending-block" aria-live="polite">
+            <span class="codicon codicon-loading codicon-modifier-spin" /> Preparing HTML…
+            <span class="muted"> You can Download the file without waiting.</span>
+          </div>
+        ) : result.content.trim() ? (
           <HtmlFrame html={result.content} title={result.session.title} />
         ) : result.htmlUri ? (
           <iframe class="html-result" src={result.htmlUri} sandbox="allow-scripts" title={result.session.title} />
@@ -83,32 +133,67 @@ export function ResultTab({ result, stream, busy }: Props) {
  * Render agent HTML in a closed Shadow DOM (not a nested iframe).
  * VS Code webviews often block `data:` images inside sandboxed srcdoc iframes
  * even when parent CSP allows them; shadow roots use the page CSP and show images.
+ *
+ * Large self-contained HTML (multi‑MB data: images) is parsed after a yield so the
+ * Result toolbar (Download) stays interactive while "Rendering…" is shown.
  */
 function HtmlFrame({ html, title }: { html: string; title: string }) {
   const hostRef = useRef<HTMLDivElement>(null);
+  const [ready, setReady] = useState(false);
+
   useEffect(() => {
     const host = hostRef.current;
     if (!host) return;
+    let cancelled = false;
+    setReady(false);
     const shadow = host.shadowRoot ?? host.attachShadow({ mode: 'open' });
     shadow.innerHTML = '';
-    try {
-      const doc = new DOMParser().parseFromString(html, 'text/html');
-      for (const el of Array.from(doc.head?.querySelectorAll('style, link[rel="stylesheet"]') ?? [])) {
-        shadow.appendChild(el.cloneNode(true));
+
+    // :empty on the host never clears for Shadow DOM children — do not rely on CSS :empty.
+    // Yield so "Rendering…" paints, then do the heavy DOMParser / innerHTML work.
+    const timer = window.setTimeout(() => {
+      if (cancelled) return;
+      try {
+        const doc = new DOMParser().parseFromString(html, 'text/html');
+        for (const el of Array.from(doc.head?.querySelectorAll('style, link[rel="stylesheet"]') ?? [])) {
+          shadow.appendChild(el.cloneNode(true));
+        }
+        const root = document.createElement('div');
+        root.className = 'xplain-html-root';
+        root.setAttribute('data-title', title);
+        root.innerHTML = doc.body?.innerHTML?.trim() ? doc.body.innerHTML : html;
+        shadow.appendChild(root);
+      } catch {
+        const pre = document.createElement('pre');
+        pre.textContent = html;
+        shadow.appendChild(pre);
       }
-      const root = document.createElement('div');
-      root.className = 'xplain-html-root';
-      root.setAttribute('data-title', title);
-      // Prefer body contents; fall back to full markup if the agent omitted <body>.
-      root.innerHTML = doc.body?.innerHTML?.trim() ? doc.body.innerHTML : html;
-      shadow.appendChild(root);
-    } catch {
-      const pre = document.createElement('pre');
-      pre.textContent = html;
-      shadow.appendChild(pre);
-    }
+      if (!cancelled) setReady(true);
+    }, 0);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
   }, [html, title]);
-  return <div class="html-result html-result-shadow" ref={hostRef} role="article" aria-label={title} />;
+
+  return (
+    <div class="html-result-frame">
+      {!ready && (
+        <div class="html-result-pending-block" aria-live="polite">
+          <span class="codicon codicon-loading codicon-modifier-spin" /> Rendering…
+          <span class="muted"> Large diagrams can take a few seconds. Download is available above.</span>
+        </div>
+      )}
+      <div
+        class={`html-result html-result-shadow${ready ? ' is-ready' : ' is-pending'}`}
+        ref={hostRef}
+        role="article"
+        aria-label={title}
+        aria-busy={!ready}
+      />
+    </div>
+  );
 }
 
 function MarkdownBody({ source }: { source: string }) {

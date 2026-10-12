@@ -1,10 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'preact/hooks';
-import type { HostMessage, InitState, PanelTab } from '@shared/protocol';
+import type { DriftMap, HostMessage, InitState, PanelTab } from '@shared/protocol';
 import type {
   AgentModelsResult,
   AgentSettingsView,
   AgentTestResult,
-  BackgroundState,
   BusyState,
   DraftState,
   ResultFormat,
@@ -24,6 +23,8 @@ export interface ResultView {
   session: SessionMeta;
   format: ResultFormat;
   content: string;
+  /** Host is still preparing HTML; Download is already available. */
+  contentPending?: boolean;
   htmlUri?: string;
 }
 
@@ -38,18 +39,17 @@ interface Notice {
   message: string;
 }
 
-const EMPTY_BG: BackgroundState = { uri: null, opacity: 0.18, blur: 0, fit: 'cover', scope: null };
-const EMPTY_EDITOR: TemplateEditorState = { id: null, name: '', instruction: '', files: [] };
+const EMPTY_EDITOR: TemplateEditorState = { id: null, name: '', instruction: '', files: [], scope: 'project' };
 
 export function App() {
   const persisted = useMemo(() => getPersisted<{ tab?: PanelTab; editor?: TemplateEditorState }>(), []);
   const [tab, setTab] = useState<PanelTab>(persisted?.tab ?? 'context');
   const [draft, setDraft] = useState<DraftState>(DEFAULT_DRAFT);
   const [sessions, setSessions] = useState<SessionMeta[]>([]);
+  const [drift, setDrift] = useState<DriftMap>({});
   const [templates, setTemplates] = useState<TemplateMeta[]>([]);
   const [pickMode, setPickMode] = useState(false);
   const [busy, setBusy] = useState<BusyState>({ busy: false });
-  const [background, setBackground] = useState<BackgroundState>(EMPTY_BG);
   const [hasWorkspace, setHasWorkspace] = useState(true);
   const [agentLabel, setAgentLabel] = useState('');
   const [agentSettings, setAgentSettings] = useState<AgentSettingsView | null>(null);
@@ -59,7 +59,12 @@ export function App() {
   const [result, setResult] = useState<ResultView | null>(null);
   const [stream, setStream] = useState<StreamState | null>(null);
   const [notice, setNotice] = useState<Notice | null>(null);
-  const [editor, setEditor] = useState<TemplateEditorState>(persisted?.editor ?? EMPTY_EDITOR);
+  const [editor, setEditor] = useState<TemplateEditorState>(() => {
+    const e = persisted?.editor;
+    if (!e) return EMPTY_EDITOR;
+    const scope = e.scope === 'user' || e.scope === 'project' ? e.scope : 'project';
+    return { id: e.id ?? null, name: e.name ?? '', instruction: e.instruction ?? '', files: e.files ?? [], scope };
+  });
   const [dragOver, setDragOver] = useState(false);
   const noticeTimer = useRef<number | undefined>(undefined);
 
@@ -100,6 +105,9 @@ export function App() {
         case 'draft':
           setDraft(m.draft);
           break;
+        case 'drift':
+          setDrift(m.drift);
+          break;
         case 'sessions':
           setSessions(m.sessions);
           setResult((r) => {
@@ -117,9 +125,6 @@ export function App() {
         case 'busy':
           setBusy(m.busy);
           break;
-        case 'background':
-          setBackground(m.background);
-          break;
         case 'agentLabel':
           setAgentLabel(m.label);
           break;
@@ -135,7 +140,13 @@ export function App() {
           break;
         case 'showResult':
           setStream(null);
-          setResult({ session: m.session, format: m.format, content: m.content, htmlUri: m.htmlUri });
+          setResult({
+            session: m.session,
+            format: m.format,
+            content: m.content,
+            contentPending: m.contentPending,
+            htmlUri: m.htmlUri,
+          });
           break;
         case 'streamStart':
           setStream({ sessionId: m.sessionId, title: m.title, text: '' });
@@ -150,7 +161,13 @@ export function App() {
           appendTemplateFiles(m.files);
           break;
         case 'editTemplate':
-          setEditor({ id: m.template.id, name: m.template.name, instruction: m.template.instruction, files: m.files });
+          setEditor({
+            id: m.template.id,
+            name: m.template.name,
+            instruction: m.template.instruction,
+            files: m.files,
+            scope: m.template.scope === 'builtin' ? 'project' : m.template.scope,
+          });
           setTab('templates');
           break;
         case 'tab':
@@ -171,8 +188,8 @@ export function App() {
       setTemplates(s.templates);
       setPickMode(s.pickMode);
       setBusy(s.busy);
-      setBackground(s.background);
       setHasWorkspace(s.hasWorkspace);
+      setDrift(s.drift ?? {});
       setAgentLabel(s.agentLabel);
       setAgentSettings(s.agentSettings);
     }
@@ -214,19 +231,8 @@ export function App() {
     const dt = e.dataTransfer;
     if (!dt) return;
     const files = Array.from(dt.files ?? []);
-    const images = files.filter((f) => f.type.startsWith('image/'));
-    const others = files.filter((f) => !f.type.startsWith('image/'));
-
-    // Images alone (outside Context/Templates) become the panel background.
-    if (images.length && others.length === 0 && tab !== 'templates' && tab !== 'context') {
-      const img = images[0];
-      const dataBase64 = await readAsBase64(img);
-      post({ type: 'dropBackground', name: img.name, dataBase64 });
-      return;
-    }
     const textFiles: TemplateFile[] = [];
     for (const f of files) {
-      if (f.type.startsWith('image/') && tab !== 'templates' && tab !== 'context') continue;
       if (f.size > 1024 * 1024) {
         showNotice({ level: 'warn', message: `Skipped ${f.name}: larger than 1 MB.` });
         continue;
@@ -249,21 +255,10 @@ export function App() {
 
   /* --------------------------------------------------------------- render */
 
-  const bgStyle = background.uri
-    ? {
-        backgroundImage: `url("${background.uri}")`,
-        opacity: background.opacity,
-        filter: background.blur ? `blur(${background.blur}px)` : undefined,
-        backgroundSize: background.fit === 'tile' ? 'auto' : background.fit,
-        backgroundRepeat: background.fit === 'tile' ? 'repeat' : 'no-repeat',
-      }
-    : undefined;
-
   const resultCount = sessions.filter((s) => s.status === 'done').length;
 
   return (
     <div class={`app ${dragOver ? 'drag-over' : ''}`} onDragOver={onDragOver} onDragLeave={onDragLeave} onDrop={onDrop}>
-      {bgStyle && <div class="background" style={bgStyle} />}
       <header class="tabs" role="tablist">
         <TabButton id="context" current={tab} onSelect={setTab} icon="list-selection" label="Context" badge={draft.items.length || undefined} />
         <TabButton id="result" current={tab} onSelect={setTab} icon="book" label="Result" />
@@ -302,11 +297,19 @@ export function App() {
         {tab === 'context' && (
           <ContextTab draft={draft} templates={templates} busy={busy} agentLabel={agentLabel} pickMode={pickMode} onConfigureAgent={() => setTab('agent')} />
         )}
-        {tab === 'result' && <ResultTab result={result} stream={stream} busy={busy} />}
-        {tab === 'templates' && (
-          <TemplatesTab templates={templates} editor={editor} setEditor={setEditor} activeTemplateId={draft.templateId} />
+        {tab === 'result' && (
+          <ResultTab result={result} stream={stream} busy={busy} drift={result ? drift[result.session.id] : undefined} />
         )}
-        {tab === 'history' && <HistoryTab sessions={sessions} current={result?.session.id} />}
+        {tab === 'templates' && (
+          <TemplatesTab
+            templates={templates}
+            editor={editor}
+            setEditor={setEditor}
+            activeTemplateId={draft.templateId}
+            hasWorkspace={hasWorkspace}
+          />
+        )}
+        {tab === 'history' && <HistoryTab sessions={sessions} current={result?.session.id} drift={drift} />}
         {tab === 'agent' && (
           <AgentTab settings={agentSettings} test={agentTest} testing={agentTesting} onTestStart={() => setAgentTesting(true)} models={agentModels} />
         )}
@@ -316,11 +319,7 @@ export function App() {
         <div class="drop-overlay">
           <span class="codicon codicon-cloud-upload" />
           <div>
-            {tab === 'context'
-              ? 'Drop text files to attach them to the context'
-              : tab === 'templates'
-                ? 'Drop files to attach them to the template'
-                : 'Drop an image for the background, or files for a template'}
+            {tab === 'context' ? 'Drop text files to attach them to the context' : 'Drop files to attach them to the template'}
           </div>
         </div>
       )}
@@ -344,16 +343,4 @@ function TabButton(props: {
       {props.badge !== undefined && <span class="badge">{props.badge}</span>}
     </button>
   );
-}
-
-function readAsBase64(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => {
-      const url = String(reader.result);
-      resolve(url.slice(url.indexOf(',') + 1));
-    };
-    reader.onerror = () => reject(reader.error);
-    reader.readAsDataURL(file);
-  });
 }

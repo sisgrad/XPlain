@@ -1,0 +1,9 @@
+{
+  "id": "builtin-perf-hotspot",
+  "scope": "builtin",
+  "name": "Perf hotspot",
+  "instruction": "Treat the selected code as a performance hotspot.\n\nExplain:\n1. What work dominates (CPU, memory, I/O, GPU)\n2. Algorithmic complexity and constant factors\n3. Cache / locality / allocation pressure\n4. Parallelism opportunities and hazards\n5. Concrete, ordered optimization steps with expected impact\n\nAvoid vague advice; tie each suggestion to the code. Match the explanation language requested by XPlain.",
+  "files": [],
+  "createdAt": "2026-01-01T00:00:00.000Z",
+  "updatedAt": "2026-01-01T00:00:00.000Z"
+}

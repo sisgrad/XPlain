@@ -155,13 +155,23 @@ export function ContextTab({ draft, templates, busy, agentLabel, pickMode, onCon
             {templates.map((t) => (
               <option value={t.id} key={t.id}>
                 {t.name}
+                {t.scope === 'builtin' ? ' · built-in' : t.scope === 'user' ? ' · user' : ' · project'}
                 {t.files.length ? ` (${t.files.length} file${t.files.length === 1 ? '' : 's'})` : ''}
               </option>
             ))}
           </select>
-          {template && (
+          {template && template.scope !== 'builtin' && (
             <button class="icon-button" title="Edit template" onClick={() => post({ type: 'loadTemplateForEdit', templateId: template.id })}>
               <span class="codicon codicon-edit" />
+            </button>
+          )}
+          {template?.scope === 'builtin' && (
+            <button
+              class="icon-button"
+              title="Duplicate built-in template to customize"
+              onClick={() => post({ type: 'duplicateTemplate', templateId: template.id, scope: 'user' })}
+            >
+              <span class="codicon codicon-copy" />
             </button>
           )}
         </div>

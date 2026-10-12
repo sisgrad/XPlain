@@ -7,7 +7,6 @@
  *   sessions/<id>/result.md|html  agent answer
  *   templates/<id>/template.json  name, instruction, file list
  *   templates/<id>/files/<name>   attached files
- *   ui/background.<ext>           optional per-project panel background
  */
 import type {
   Anchor,
@@ -28,7 +27,6 @@ export const XPLAIN_DIR = '.xplain';
 const INDEX_FILE = 'index.json';
 const SESSIONS_DIR = 'sessions';
 const TEMPLATES_DIR = 'templates';
-export const UI_DIR = 'ui';
 
 export interface AnchorInput {
   file: string;
@@ -84,7 +82,21 @@ export class XplainStore {
       // Keep temp files out of git; users may still commit the folder itself.
       await this.fs.writeFile('.gitignore', encodeText('*.tmp\n'));
     }
+    await this.backfillCodeHashes();
     await this.reloadTemplates();
+  }
+
+  /** Legacy sessions (before drift tracking) get codeHashes from their context.json. */
+  private async backfillCodeHashes(): Promise<void> {
+    let changed = false;
+    for (const meta of this.index.sessions) {
+      if (meta.codeHashes || meta.anchorIds.length === 0) continue;
+      const ctx = await this.readSessionContext(meta.id);
+      if (!ctx) continue;
+      meta.codeHashes = codeHashesFromItems(ctx.items);
+      changed = true;
+    }
+    if (changed) await this.persistIndex();
   }
 
   /** Reload from disk (e.g. after an external change detected by a watcher). */
@@ -210,6 +222,7 @@ export class XplainStore {
       question: input.question,
       resultFormat: 'markdown',
       status: 'pending',
+      codeHashes: codeHashesFromItems(input.items),
     };
     const context: SessionContext = {
       id,
@@ -276,6 +289,8 @@ export class XplainStore {
         new Set(patch.items.flatMap((i) => (i.kind === 'code' ? [i.anchorId] : []))),
       );
     }
+    // The agent now sees the current text: drift resets for these blocks.
+    meta.codeHashes = codeHashesFromItems(patch.items);
     await this.patchContext(sessionId, {
       title: meta.title,
       question: patch.question,
@@ -366,8 +381,17 @@ export class XplainStore {
     for (const id of ids) {
       try {
         const raw = decodeText(await this.fs.readFile(joinPath(TEMPLATES_DIR, id, 'template.json')));
-        const meta = JSON.parse(raw) as TemplateMeta;
-        if (meta && meta.id === id) list.push(meta);
+        const parsed = JSON.parse(raw) as Partial<TemplateMeta>;
+        if (!parsed || parsed.id !== id) continue;
+        list.push({
+          id,
+          scope: 'project',
+          name: typeof parsed.name === 'string' ? parsed.name : 'Untitled template',
+          instruction: typeof parsed.instruction === 'string' ? parsed.instruction : '',
+          files: Array.isArray(parsed.files) ? parsed.files : [],
+          createdAt: typeof parsed.createdAt === 'string' ? parsed.createdAt : new Date().toISOString(),
+          updatedAt: typeof parsed.updatedAt === 'string' ? parsed.updatedAt : new Date().toISOString(),
+        });
       } catch {
         /* skip broken template folders */
       }
@@ -401,6 +425,7 @@ export class XplainStore {
     }
     const meta: TemplateMeta = {
       id,
+      scope: 'project',
       name: input.name.trim() || 'Untitled template',
       instruction: input.instruction,
       files,
@@ -433,26 +458,6 @@ export class XplainStore {
     return out;
   }
 
-  /* -------------------------------------------------------------------- ui */
-
-  async findBackgroundFile(): Promise<string | undefined> {
-    const names = await this.fs.readdir(UI_DIR);
-    const hit = names.find((n) => /^background\.(png|jpe?g|gif|webp|svg|bmp)$/i.test(n));
-    return hit ? joinPath(UI_DIR, hit) : undefined;
-  }
-
-  async writeBackground(ext: string, data: Uint8Array): Promise<string> {
-    await this.clearBackground();
-    const rel = joinPath(UI_DIR, `background.${ext}`);
-    await this.fs.writeFile(rel, data);
-    return rel;
-  }
-
-  async clearBackground(): Promise<void> {
-    const existing = await this.findBackgroundFile();
-    if (existing) await this.fs.delete(existing);
-  }
-
   /* ------------------------------------------------------------- internals */
 
   private persistIndex(): Promise<void> {
@@ -462,6 +467,13 @@ export class XplainStore {
       .catch((err) => console.error('[xplain] failed to write index.json', err));
     return this.writeQueue;
   }
+}
+
+/** anchorId → hash of the code text in `items` (what the agent saw). */
+export function codeHashesFromItems(items: ContextItem[]): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const i of items) if (i.kind === 'code') out[i.anchorId] = hashBlock(i.text);
+  return out;
 }
 
 export function sanitizeFileName(name: string): string {

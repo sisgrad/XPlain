@@ -6,3 +6,9 @@ out/
 .xplain/
 *.log
 .DS_Store
+debug_samples/
+releases/
+# Runtime files XPlain writes into the workspace when used on itself.
+.claude/skills/excalidraw-diagram/
+.cursor/skills/excalidraw-diagram/
+.cursorignore

@@ -2,11 +2,12 @@ import * as vscode from 'vscode';
 import { ContextDraft } from './context/ContextDraft';
 import { readContextPrefs } from './context/ContextPrefs';
 import { AnchorDecorations } from './editor/decorations';
+import { DriftTracker } from './editor/DriftTracker';
 import { LiveAnchors } from './editor/LiveAnchors';
 import { PickMode } from './editor/pickMode';
 import { XplainCodeLensProvider } from './editor/XplainCodeLensProvider';
-import { BackgroundManager } from './panel/background';
 import { VIEW_ID, XplainViewProvider } from './panel/XplainViewProvider';
+import { TemplateLibrary } from './storage/TemplateLibrary';
 import { VscodeStoreFs } from './storage/vscodeFs';
 import { XPLAIN_DIR, XplainStore } from './storage/XplainStore';
 import { XplainController } from './XplainController';
@@ -19,6 +20,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   let store: XplainStore | undefined;
   let storeFs: VscodeStoreFs | undefined;
   let live: LiveAnchors | undefined;
+  let drift: DriftTracker | undefined;
 
   if (folder) {
     storeFs = new VscodeStoreFs(vscode.Uri.joinPath(folder.uri, XPLAIN_DIR));
@@ -36,14 +38,22 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     output.appendLine('[init] no workspace folder; storage disabled');
   }
 
+  const templates = new TemplateLibrary(context.extensionUri, context.globalStorageUri, store);
+  try {
+    await templates.init();
+    output.appendLine(`[init] templates: ${templates.list.length} (builtin/user/project)`);
+  } catch (err) {
+    output.appendLine(`[init] templates failed: ${(err as Error).message}`);
+  }
+  context.subscriptions.push(templates);
+
   const draft = new ContextDraft();
   const prefs = readContextPrefs(context.workspaceState);
-  // Drop a stale template id if that template no longer exists in this workspace.
-  const templateId = prefs.templateId && store?.getTemplate(prefs.templateId) ? prefs.templateId : null;
+  // Drop a stale template id if that template no longer exists.
+  const templateId = prefs.templateId && templates.getTemplate(prefs.templateId) ? prefs.templateId : null;
   draft.restorePrefs({ ...prefs, templateId });
   const pickMode = new PickMode();
   const view = new XplainViewProvider(context, () => (storeFs ? [storeFs.uri('')] : []));
-  const background = new BackgroundManager(context, store, storeFs);
   context.subscriptions.push(
     pickMode,
     view,
@@ -52,14 +62,17 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 
   if (store) {
     live = new LiveAnchors(store);
-    const lens = new XplainCodeLensProvider(store, live);
-    const decorations = new AnchorDecorations(context, store, live, draft);
+    drift = new DriftTracker(store, live);
+    const lens = new XplainCodeLensProvider(store, live, drift);
+    const decorations = new AnchorDecorations(context, store, live, draft, drift);
     context.subscriptions.push(
       live,
+      drift,
       lens,
       decorations,
       vscode.languages.registerCodeLensProvider({ scheme: 'file' }, lens),
     );
+    void drift.refresh();
 
     // Pick up external edits to .xplain (git checkout, manual edits, another window).
     const s = store;
@@ -85,7 +98,18 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     );
   }
 
-  const controller = new XplainController({ context, store, storeFs, view, live, draft, pickMode, background, output });
+  const controller = new XplainController({
+    context,
+    store,
+    storeFs,
+    templates,
+    view,
+    live,
+    drift,
+    draft,
+    pickMode,
+    output,
+  });
   controller.registerCommands();
   context.subscriptions.push(controller);
 

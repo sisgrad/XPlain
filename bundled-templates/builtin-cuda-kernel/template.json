@@ -1,0 +1,9 @@
+{
+  "id": "builtin-cuda-kernel",
+  "scope": "builtin",
+  "name": "CUDA kernel review",
+  "instruction": "Explain the selected CUDA / GPU code with focus on:\n\n1. Launch geometry (grid/block) and what each thread owns\n2. Memory hierarchy: registers, SMEM, GMEM, TMEM if present; coalescing and bank conflicts\n3. Synchronization and pipelines (barriers, async copies, warp specialization)\n4. Numerical / MMA / tensor-core details when relevant\n5. Likely bottlenecks and safe optimization ideas\n\nUse precise terminology. Prefer diagrams only when Excalidraw is enabled. Match the explanation language requested by XPlain.",
+  "files": [],
+  "createdAt": "2026-01-01T00:00:00.000Z",
+  "updatedAt": "2026-01-01T00:00:00.000Z"
+}

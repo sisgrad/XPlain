@@ -19,7 +19,11 @@
     "agent",
     "documentation"
   ],
-  "icon": "media/xplain-128.png",
+  "icon": "media/xplain-256.png",
+  "galleryBanner": {
+    "color": "#0b0f17",
+    "theme": "dark"
+  },
   "extensionKind": [
     "workspace"
   ],
@@ -83,6 +87,18 @@
         "category": "XPlain"
       },
       {
+        "command": "xplain.refreshExplanation",
+        "title": "Refresh Explanation for Current Code",
+        "category": "XPlain",
+        "icon": "$(sync)"
+      },
+      {
+        "command": "xplain.showCodeDiff",
+        "title": "Show Code Diff for Explanation",
+        "category": "XPlain",
+        "icon": "$(diff)"
+      },
+      {
         "command": "xplain.clearContext",
         "title": "Clear Context",
         "category": "XPlain",
@@ -116,15 +132,10 @@
         "category": "XPlain"
       },
       {
-        "command": "xplain.chooseBackground",
-        "title": "Choose Background Image...",
+        "command": "xplain.setupSubscription",
+        "title": "Set Up Subscription Harness (Claude Code / Codex via Claudexor)...",
         "category": "XPlain",
-        "icon": "$(file-media)"
-      },
-      {
-        "command": "xplain.clearBackground",
-        "title": "Clear Background Image",
-        "category": "XPlain"
+        "icon": "$(account)"
       },
       {
         "command": "xplain.openStorageFolder",
@@ -145,19 +156,9 @@
           "group": "navigation@1"
         },
         {
-          "command": "xplain.chooseBackground",
-          "when": "view == xplain.panel",
-          "group": "navigation@2"
-        },
-        {
           "command": "xplain.clearContext",
           "when": "view == xplain.panel",
           "group": "navigation@3"
-        },
-        {
-          "command": "xplain.clearBackground",
-          "when": "view == xplain.panel",
-          "group": "1_settings@1"
         },
         {
           "command": "xplain.configureAgent",
@@ -194,6 +195,14 @@
         {
           "command": "xplain.addResultToContext",
           "when": "false"
+        },
+        {
+          "command": "xplain.refreshExplanation",
+          "when": "false"
+        },
+        {
+          "command": "xplain.showCodeDiff",
+          "when": "false"
         }
       ]
     },
@@ -219,14 +228,18 @@
             "hermes",
             "openai",
             "anthropic",
+            "openaiSubscription",
+            "anthropicSubscription",
             "cursor",
             "mock"
           ],
           "enumDescriptions": [
             "Your own agent service speaking the XPlain HTTP contract (xplain.agent.endpoint).",
             "Hermes Agent API server (OpenAI-compatible, default http://127.0.0.1:8642/v1).",
-            "OpenAI / Codex models or any OpenAI-compatible Chat Completions server.",
-            "Anthropic Messages API (Claude).",
+            "OpenAI / Codex (API): OpenAI Chat Completions or any compatible server; needs an API key.",
+            "Anthropic / Claude (API): Anthropic Messages API; needs an API key.",
+            "OpenAI / Codex (Subscription): your ChatGPT Plus/Pro login through the Codex CLI, driven by the bundled Claudexor. No API key.",
+            "Anthropic / Claude (Subscription): your Claude Pro/Max login through Claude Code, driven by the bundled Claudexor. No API key.",
             "Cursor Agent SDK (@cursor/sdk) running locally against this workspace.",
             "Built-in offline mock answer (for demos and development)."
           ],
@@ -244,10 +257,90 @@
           "editPresentation": "multilineText",
           "description": "[hermes/openai/anthropic/cursor] Custom system prompt. Empty uses the built-in XPlain prompt."
         },
+        "xplain.agent.openaiSubscription.model": {
+          "type": "string",
+          "default": "",
+          "description": "[openaiSubscription] Model id passed to the Codex CLI (e.g. gpt-5.6-codex). Empty = harness default. Uses your ChatGPT subscription via Claudexor; no API key."
+        },
+        "xplain.agent.openaiSubscription.effort": {
+          "type": "string",
+          "default": "",
+          "description": "[openaiSubscription] Reasoning effort hint passed to Claudexor as --effort (minimal/low/medium/high/xhigh; clamped to what the model advertises). Empty = default."
+        },
+        "xplain.agent.anthropicSubscription.model": {
+          "type": "string",
+          "default": "",
+          "description": "[anthropicSubscription] Model id passed to Claude Code (e.g. claude-sonnet-5). Empty = harness default. Uses your Claude Pro/Max subscription via Claudexor; no API key."
+        },
+        "xplain.agent.anthropicSubscription.effort": {
+          "type": "string",
+          "default": "",
+          "description": "[anthropicSubscription] Reasoning effort hint passed to Claudexor as --effort (low/medium/high/xhigh/max; clamped to what the model advertises). Empty = default."
+        },
+        "xplain.agent.claudexor.cliPath": {
+          "type": "string",
+          "default": "",
+          "description": "Path to a claudexor CLI entry (bin/claudexor.js or a global `claudexor`). Empty = the copy bundled with XPlain."
+        },
+        "xplain.agent.claudexor.nodePath": {
+          "type": "string",
+          "default": "",
+          "description": "Node.js >= 24.15 binary used to run the Claudexor CLI. Empty = auto-detect (managed runtime in global storage, extension host runtime, PATH, nvm, /usr/local/bin) and download one if nothing fits."
+        },
+        "xplain.agent.claudexor.autoInstallNode": {
+          "type": "boolean",
+          "default": true,
+          "description": "When no Node.js >= 24.15 is found for the Claudexor CLI, download an official build from nodejs.org (checksum-verified) into the extension's global storage. No sudo, PATH untouched."
+        },
+        "xplain.agent.claudexor.nodeVersion": {
+          "type": "string",
+          "default": "",
+          "description": "Exact Node.js version to download for Claudexor (e.g. 24.21.0). Empty = extension default."
+        },
+        "xplain.agent.claudexor.mode": {
+          "type": "string",
+          "enum": [
+            "auto",
+            "ask",
+            "agent"
+          ],
+          "enumDescriptions": [
+            "Read-only `ask` normally; write-capable `agent` run when the Excalidraw checkbox is on (needed to render PNGs).",
+            "Always the read-only `ask` route (no file writes; Excalidraw PNG rendering unavailable).",
+            "Always a write-capable `agent` run (--in-place --access workspace_write --no-review)."
+          ],
+          "default": "auto",
+          "description": "Which Claudexor route the subscription providers use."
+        },
+        "xplain.agent.claudexor.project": {
+          "type": "string",
+          "enum": [
+            "auto",
+            "workspace",
+            "private"
+          ],
+          "enumDescriptions": [
+            "Workspace folder when it is already a git repository; otherwise a private per-workspace dir under the extension's global storage (diagrams are mirrored back to .xplain/diagrams/).",
+            "Always the workspace folder. Warning: Claudexor git-inits non-git folders with a baseline commit.",
+            "Always the private dir. The agent never sees your project tree (all code is in the prompt)."
+          ],
+          "default": "auto",
+          "description": "Where Claudexor `agent` runs work (subscription providers)."
+        },
         "xplain.agent.cursor.model": {
           "type": "string",
           "default": "composer-2.5",
           "description": "[cursor] Model id for the Cursor Agent SDK (from Cursor.models.list(), e.g. composer-2.5)."
+        },
+        "xplain.agent.cursor.effort": {
+          "type": "string",
+          "default": "",
+          "description": "[cursor] Reasoning effort / thinking level mapped onto the model's effort parameter from Cursor.models.list() (levels shown in the Agent tab). Empty = model default."
+        },
+        "xplain.agent.cursor.useSandbox": {
+          "type": "boolean",
+          "default": false,
+          "description": "[cursor] Enable Cursor local Landlock sandbox. Leave off on Remote-SSH if you see \"sandboxing is requested but no sandbox available\". Artifact isolation still uses .cursorignore + prompt rules when sandbox is off."
         },
         "xplain.agent.hermes.baseUrl": {
           "type": "string",
@@ -269,6 +362,11 @@
           "default": "chat-latest",
           "description": "[openai] Model id, e.g. a Codex/GPT model. Use 'Test connection' in the Agent tab to list available models."
         },
+        "xplain.agent.openai.effort": {
+          "type": "string",
+          "default": "",
+          "description": "[openai] reasoning_effort sent with chat completions (none/minimal/low/medium/high/xhigh, model-dependent). Empty = model default."
+        },
         "xplain.agent.anthropic.baseUrl": {
           "type": "string",
           "default": "https://api.anthropic.com",
@@ -278,6 +376,11 @@
           "type": "string",
           "default": "claude-sonnet-5",
           "description": "[anthropic] Claude model id."
+        },
+        "xplain.agent.anthropic.effort": {
+          "type": "string",
+          "default": "",
+          "description": "[anthropic] output_config.effort sent with messages (low/medium/high/xhigh/max, model-dependent). Empty = model default."
         },
         "xplain.agent.anthropic.maxTokens": {
           "type": "number",
@@ -315,29 +418,36 @@
           "default": true,
           "description": "Highlight code blocks with explanations in the editor gutter."
         },
-        "xplain.ui.background.opacity": {
+        "xplain.editor.hideOutdated": {
+          "type": "boolean",
+          "default": false,
+          "description": "Hide CodeLens entries for explanations whose code changed heavily (outdated/lost). Sessions are never deleted; they stay in History with a drift badge."
+        },
+        "xplain.drift.outdatedRatio": {
           "type": "number",
-          "default": 0.18,
-          "minimum": 0,
+          "default": 0.3,
+          "minimum": 0.05,
           "maximum": 1,
-          "description": "Opacity of the panel background image."
+          "description": "Share of changed lines (relative to the explained block) above which an explanation is marked outdated instead of merely 'code changed'. Comment/whitespace-only edits never count."
         },
-        "xplain.ui.background.blur": {
+        "xplain.drift.driftedMaxLines": {
           "type": "number",
-          "default": 0,
-          "minimum": 0,
-          "maximum": 40,
-          "description": "Blur (px) applied to the panel background image."
+          "default": 10,
+          "minimum": 1,
+          "description": "Absolute number of changed lines above which an explanation is marked outdated regardless of ratio."
         },
-        "xplain.ui.background.fit": {
+        "xplain.refresh.mode": {
           "type": "string",
           "enum": [
-            "cover",
-            "contain",
-            "tile"
+            "overwrite",
+            "newSession"
           ],
-          "default": "cover",
-          "description": "How the background image is fitted into the panel."
+          "enumDescriptions": [
+            "Refresh overwrites the existing explanation (same session, like Extend).",
+            "Refresh creates a new explanation on the same blocks and keeps the old one in History."
+          ],
+          "default": "overwrite",
+          "description": "What the Refresh action does when code drifted from an explanation."
         }
       }
     }
@@ -349,13 +459,15 @@
     "check": "tsc -p tsconfig.json --noEmit && tsc -p webview/tsconfig.json --noEmit",
     "lint": "eslint src webview --ext .ts,.tsx",
     "test": "tsc -p tsconfig.test.json && mocha out/test/**/*.test.js",
-    "package": "node esbuild.mjs --production && vsce package --allow-missing-repository --out dist/",
+    "package": "node esbuild.mjs --production && node scripts/package.mjs",
+    "release": "node esbuild.mjs --production && node scripts/package.mjs --release",
     "install:ide": "bash scripts/install.sh",
     "vscode:prepublish": "node esbuild.mjs --production"
   },
   "dependencies": {
     "@cursor/sdk": "^1.0.37",
     "@vscode/codicons": "^0.0.36",
+    "claudexor": "4.1.0",
     "highlight.js": "^11.11.1",
     "markdown-it": "^14.1.0",
     "preact": "^10.26.4"

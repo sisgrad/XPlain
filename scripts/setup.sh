@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # XPlain: one-shot setup from sources (Linux / macOS / WSL).
 #   - installs Node.js LTS via nvm into the user's home if node >= 20 is missing (no sudo)
-#   - installs npm dependencies, builds the bundles and packages dist/xplain-<version>.vsix
+#   - installs npm dependencies, builds the bundles and packages dist/xplain-<platform>-<version>.vsix
 # Usage: bash scripts/setup.sh [--no-package] [--install]
 #   --no-package  skip creating the .vsix (dev only: npm run watch / F5)
 #   --install     also install the .vsix into Cursor / VS Code (calls scripts/install.sh)

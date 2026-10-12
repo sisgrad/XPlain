@@ -33,14 +33,17 @@ flowchart LR
 | Модуль | Ответственность |
 | --- | --- |
 | `extension.ts` | Активация: создание `XplainStore` для первого workspace-фолдера, регистрация view/CodeLens/декораций, watcher `.xplain`, сборка `XplainController` |
-| `XplainController.ts` | Оркестрация: команды, обработка `ViewMessage`, добавление выделения, отправка агенту, открытие результатов, QuickPick, шаблоны, фон |
+| `XplainController.ts` | Оркестрация: команды, обработка `ViewMessage`, добавление выделения, отправка агенту, открытие результатов, QuickPick, шаблоны; drift: push `DriftMap` в webview, `showCodeDiff` (виртуальные документы `xplain-code:` + `vscode.diff`), `refreshSession` (Extend + `code-changes.diff` + авто-вопрос) |
 | `context/ContextDraft.ts` | Состояние неотправленного контекста (items, question, templateId), дедупликация, события изменений |
-| `storage/XplainStore.ts` | Персистентность `.xplain/`: индекс, якоря (`upsertAnchor`), сессии, результаты, шаблоны, фон. Работает поверх абстракции `StoreFs` |
+| `storage/XplainStore.ts` | Персистентность `.xplain/`: индекс, якоря, сессии, результаты, project-шаблоны (`StoreFs`) |
+| `storage/TemplateLibrary.ts` | Шаблоны трёх уровней: builtin (`bundled-templates/`), user (globalStorage), project (store) |
 | `storage/fs.ts`, `storage/vscodeFs.ts` | `StoreFs` (relative POSIX-пути): `NodeStoreFs` для тестов, `VscodeStoreFs` поверх `workspace.fs` (работает и при Remote) |
 | `editor/anchors.ts` | Чистые функции: нормализация/хеш блока, `toLineChange`, `applyLineChange(s)`, `findSnippet`, `rangeMatchesHash` |
 | `editor/LiveAnchors.ts` | Актуальные диапазоны якорей для открытых документов: применяет `onDidChangeTextDocument`, валидирует по хешу, переищет по snippet, отложенно сохраняет в store |
-| `editor/XplainCodeLensProvider.ts` | CodeLens над каждым нестареющим якорем с ≥ 1 готовой сессией |
-| `editor/decorations.ts` | Gutter-иконка, подсветка, hover с command-ссылками; подсветка блоков текущего контекста |
+| `editor/drift.ts` | Чистые функции drift: `computeDrift` (LCS line diff, cosmetic-правки = fresh, смена первой значимой строки → outdated, пороги), `worstLevel`, `describeDrift`, `unifiedDiff`, `stripCosmetic` |
+| `editor/DriftTracker.ts` | Для каждой сессии сравнивает `codeHashes` с текущим текстом блоков (открытый документ через `LiveAnchors`, иначе файл с диска; кэш по mtime), debounce, событие `DriftMap` |
+| `editor/XplainCodeLensProvider.ts` | CodeLens над каждым нестареющим якорем с ≥ 1 готовой сессией; суффикс drift (`code changed` / `outdated`), `hideOutdated` |
+| `editor/decorations.ts` | Gutter-иконка, подсветка, hover с command-ссылками (включая diff/refresh); пунктирная рамка для drifted-блоков; подсветка блоков текущего контекста |
 | `editor/pickMode.ts` | Флаг pick mode, status bar item, контекстный ключ `xplain.pickMode`, автовыключение |
 | `agent/AgentProvider.ts` | Интерфейс `AgentProvider`, типы `AgentRequest/AgentItem/AgentResponse`, `AgentError` |
 | `agent/AgentRegistry.ts` | Чтение/запись `xplain.agent.*` (`read/view/save`, цель global/workspace, дефолты не записываются), ключи в `SecretStorage` по провайдеру, фабрика провайдера, подпись для футера, `listModels()` (`GET /models` для чат-провайдеров), `test()` (список моделей / ping) |
@@ -52,6 +55,7 @@ flowchart LR
 | `agent/HttpAgentProvider.ts` | Провайдер `xplain`: `fetch` к endpoint, JSON / NDJSON / SSE по контракту XPlain |
 | `agent/hermesHints.ts` | Распознавание типичной ошибки: Base URL указывает на Hermes dashboard, а не на API-сервер (`GET /api/status` → `gateway_platforms.api_server.listener_base`), текст подсказки с нужным адресом/портом |
 | `agent/OpenAIChatProvider.ts` | Провайдеры `hermes` и `openai`: Chat Completions, SSE-чанки, пропуск сторонних событий (`hermes.tool.progress`), `listOpenAIModels` |
+| `agent/ClaudexorProvider.ts` | Провайдеры `openaiSubscription` / `anthropicSubscription`: запуск поставляемого `node_modules/claudexor` под Node ≥ 24.15 (автопоиск): `ask` (read-only) или `agent --in-place --access workspace_write --no-review` (при Excalidraw) в workspace (git) либо в приватной per-workspace папке (копия скилла, `mirrorSessionDiagrams` → `.xplain/diagrams/<id>/`); парсинг NDJSON-событий → прогресс, чтение `final/answer.md`, `recoverHtmlAnswer`; `harnessStatus` (doctor), `listHarnessModels`, `cliInvocation`/`shellCommand` для терминала настройки |
 | `agent/AnthropicProvider.ts` | Провайдер `anthropic`: Messages API, `content_block_delta`/`text_delta`, `listAnthropicModels` |
 | `agent/MockAgentProvider.ts` | Офлайн-ответ со стримингом для демо и smoke-тестов |
 | `agent/prompt.ts` | Общие `systemPrompt` + `instructions` для всех провайдеров (`withSharedInstructions`) |
@@ -59,7 +63,6 @@ flowchart LR
 | `agent/inlineAssets.ts` | Встраивание локальных `<img src="…/file.png">` / `url(...)` в `data:` URI (агент не шлёт base64) |
 | `agent/titles.ts` | `deriveTitle`: агент → заголовок md/html → вопрос → файл+диапазон; обрезка до 72 символов |
 | `panel/XplainViewProvider.ts` | `WebviewViewProvider`: HTML-оболочка, CSP с nonce, `localResourceRoots`, очередь сообщений до resolve |
-| `panel/background.ts` | Выбор/сохранение/очистка фона (user scope в `globalStorageUri`, workspace scope в `.xplain/ui/`), состояние для webview |
 | `shared/types.ts`, `shared/protocol.ts` | Общие типы данных и протокол сообщений (используются и хостом, и webview через алиас `@shared/*`) |
 | `util/emitter.ts`, `util/ids.ts` | Мини-эмиттер без зависимости от `vscode`, генерация id, sha1 |
 
@@ -72,7 +75,7 @@ flowchart LR
 ```
 webview/
   main.tsx            точка входа, render(<App/>)
-  App.tsx             состояние панели, приём HostMessage, вкладки, drag-and-drop, Shift+X, фон
+  App.tsx             состояние панели, приём HostMessage, вкладки, drag-and-drop, Shift+X
   vscode.ts           обёртка acquireVsCodeApi: post(), onHostMessage(), persist()/getPersisted()
   markdown.ts         markdown-it (html:false, linkify) + highlight.js (common + cuda/cpp)
   components/
@@ -92,14 +95,14 @@ webview/
 Определён в `src/shared/protocol.ts` как discriminated unions.
 
 **Host → Webview (`HostMessage`)**: `init` (полное состояние), `draft`, `sessions`, `templates`, `pickMode`,
-`busy`, `background`, `agentLabel`, `agentSettings` (`AgentSettingsView`: настройки + `hasKey` по провайдерам +
+`busy`, `agentLabel`, `agentSettings` (`AgentSettingsView`: настройки + `hasKey` по провайдерам +
 `target`), `agentTest`, `agentModels` (список моделей с `requestId`, `provider`, `baseUrl`, `error?`), `showResult`, `streamStart` / `streamDelta` / `streamEnd`, `templateFiles`,
 `editTemplate`, `tab`, `notice`.
 
 **Webview → Host (`ViewMessage`)**: `ready`, `setQuestion`, `setTemplate`, `removeItem`, `moveItem`,
 `clearDraft`, `send`, `cancel`, `openSession`, `openSessionInEditor`, `addSessionToDraft`, `deleteSession`,
 `renameSession`, `revealAnchor`, `togglePickMode`, `saveTemplate`, `deleteTemplate`, `loadTemplateForEdit`,
-`pickTemplateFiles`, `readUris`, `chooseBackground`, `clearBackground`, `dropBackground`, `openSettings`,
+`pickTemplateFiles`, `readUris`, `openSettings`,
 `saveAgentSettings` (settings + target), `setAgentKey`, `clearAgentKey`, `testAgent`, `listModels` (settings + requestId), `setExplainLanguage`, `setUseExcalidraw`, `openExternal`, `log`.
 
 Принцип: источник истины — хост. Webview отправляет намерение, хост меняет состояние и рассылает
@@ -122,9 +125,9 @@ webview/
 
 1. `send` → если `draft.extendSessionId` задан (кнопка **Extend** на Result): `replaceSessionContext` на
    существующую сессию (**без** `pending`, CodeLens остаётся); иначе `createSession` (`pending`).
-2. `withSharedInstructions` + изоляция: `.cursorignore` block + (Cursor) `sandboxOptions`; затем
-   `provider.explain`. `AgentItem[]`: код (+ `fileText`), явно добавленные `result`, вложения `file`,
-   шаблон. Диаграммы агента — только `.xplain/diagrams/<sessionId>/`.
+2. `withSharedInstructions` + изоляция: `.cursorignore` block (+ опционально Cursor
+   `sandboxOptions` если `useSandbox`); затем `provider.explain`. `AgentItem[]`: код (+ `fileText`),
+   явно добавленные `result`, вложения `file`, шаблон. Диаграммы — только `.xplain/diagrams/<sessionId>/`.
 3. Успех → `completeSession` (overwrite `result.html`) → `draft.clear()` → `openResult`.
    Отмена нового send → `deleteSession`; отмена/ошибка Extend → прежний result сохраняется.
 4. `inlineAssets` при сохранении/открытии не подтягивает PNG из чужих `diagrams/<id>/`.
@@ -157,5 +160,5 @@ Proposed API не используются. Нижняя граница совм
 - Markdown агента рендерится без raw HTML; HTML агента — в Shadow DOM панели Result (без nested iframe).
 - Файлы шаблонов / draft-вложений: ограничение 1 МБ, имена санитизируются.
 - Ключ API — только в `SecretStorage`.
-- Изоляция артефактов: общий промпт + scoped `inlineAssets`; для Cursor SDK — sandbox и
-  managed `.cursorignore` (`src/agent/cursorIsolation.ts`). Hermес без Landlock — только промпт.
+- Изоляция артефактов: общий промпт + scoped `inlineAssets`; для Cursor SDK — managed
+  `.cursorignore` (`src/agent/cursorIsolation.ts`), sandbox выключен по умолчанию. Hermes — только промпт.

@@ -8,16 +8,22 @@ import type {
   AgentSettings,
   AgentSettingsView,
   AgentTestResult,
-  BackgroundState,
+  ClaudexorHarnessId,
   BusyState,
   DraftState,
   ExplainLanguage,
   ResultFormat,
+  SessionDriftSummary,
   SessionMeta,
   SettingsTarget,
   TemplateFile,
   TemplateMeta,
 } from './types';
+
+/** sessionId → drift summary (sessions without code blocks are omitted). */
+export type DriftMap = Record<string, SessionDriftSummary>;
+
+export type ClaudexorSetupAction = 'install' | 'login' | 'doctor' | 'quota' | 'node';
 
 export type PanelTab = 'context' | 'result' | 'templates' | 'history' | 'agent';
 
@@ -27,29 +33,31 @@ export interface InitState {
   templates: TemplateMeta[];
   pickMode: boolean;
   busy: BusyState;
-  background: BackgroundState;
   /** Webview URI of the stylesheet for highlight.js. */
   hasWorkspace: boolean;
   agentLabel: string;
   agentSettings: AgentSettingsView;
+  drift: DriftMap;
 }
 
 export type HostMessage =
   | { type: 'init'; state: InitState }
   | { type: 'draft'; draft: DraftState }
   | { type: 'sessions'; sessions: SessionMeta[] }
+  | { type: 'drift'; drift: DriftMap }
   | { type: 'templates'; templates: TemplateMeta[] }
   | { type: 'pickMode'; active: boolean }
   | { type: 'busy'; busy: BusyState }
-  | { type: 'background'; background: BackgroundState }
   | { type: 'agentLabel'; label: string }
   | {
       type: 'showResult';
       session: SessionMeta;
       format: ResultFormat;
-      /** Markdown source, or full HTML document (rendered via iframe srcdoc). */
+      /** Markdown source, or full HTML document (rendered via Shadow DOM). */
       content: string;
-      /** @deprecated Prefer `content` + srcdoc; kept as a fallback URI. */
+      /** True while host still prepares HTML; Result chrome (Download) is usable. */
+      contentPending?: boolean;
+      /** @deprecated Prefer `content` + Shadow DOM; kept as a fallback URI. */
       htmlUri?: string;
     }
   | { type: 'streamStart'; sessionId: string; title: string }
@@ -76,9 +84,14 @@ export type ViewMessage =
   | { type: 'cancel' }
   | { type: 'beginExtend'; sessionId: string }
   | { type: 'cancelExtend' }
+  /** Re-explain against the current code (seeds Extend with a diff and sends). */
+  | { type: 'refreshSession'; sessionId: string }
+  /** Open VS Code diff editors: code the agent saw vs the code now. */
+  | { type: 'showCodeDiff'; sessionId: string }
   | { type: 'addDraftFiles'; files: Array<{ name: string; content: string }> }
   | { type: 'openSession'; sessionId: string }
   | { type: 'openSessionInEditor'; sessionId: string }
+  | { type: 'downloadSession'; sessionId: string }
   | { type: 'addSessionToDraft'; sessionId: string }
   | { type: 'deleteSession'; sessionId: string }
   | { type: 'renameSession'; sessionId: string; title: string }
@@ -90,20 +103,22 @@ export type ViewMessage =
       name: string;
       instruction: string;
       files: TemplateFile[];
+      /** Required for new templates; ignored when updating an existing id (keeps its scope). */
+      scope: 'user' | 'project';
     }
   | { type: 'deleteTemplate'; templateId: string }
   | { type: 'loadTemplateForEdit'; templateId: string }
+  | { type: 'duplicateTemplate'; templateId: string; scope: 'user' | 'project' }
   | { type: 'pickTemplateFiles' }
   | { type: 'readUris'; uris: string[]; destination?: 'template' | 'draft' }
-  | { type: 'chooseBackground' }
-  | { type: 'clearBackground' }
-  | { type: 'dropBackground'; name: string; dataBase64: string }
   | { type: 'openSettings' }
   | { type: 'saveAgentSettings'; settings: AgentSettings; target: SettingsTarget }
   | { type: 'setAgentKey'; provider: AgentProviderId; key: string }
   | { type: 'clearAgentKey'; provider: AgentProviderId }
   | { type: 'testAgent'; settings: AgentSettings }
   | { type: 'listModels'; settings: AgentSettings; requestId: number }
+  /** Open a terminal that installs / logs in / diagnoses a Claudexor harness (subscription providers). */
+  | { type: 'claudexorSetup'; harness: ClaudexorHarnessId; action: ClaudexorSetupAction }
   | { type: 'openExternal'; url: string }
   | { type: 'log'; message: string };
 

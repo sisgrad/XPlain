@@ -2,7 +2,7 @@
 .SYNOPSIS
   XPlain: one-shot setup from sources on Windows.
   Installs Node.js LTS (winget) if node >= 20 is missing, installs dependencies,
-  builds the bundles and packages dist\xplain-<version>.vsix.
+  builds the bundles and packages dist\xplain-<platform>-<version>.vsix.
 .PARAMETER NoPackage
   Skip creating the .vsix (development only).
 .PARAMETER Install

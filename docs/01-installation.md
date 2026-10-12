@@ -4,6 +4,11 @@
 
 - VS Code 1.85+ или Cursor (любая актуальная версия; проверено на Cursor 3.12 / VS Code API 1.128).
 - Для сборки из исходников — Node.js 20+ (скрипт установит его сам, если отсутствует).
+- Для провайдеров **(Subscription)** (Claude Code / Codex CLI через поставляемый Claudexor) нужен Node.js **24.15+**
+  на машине, где работает расширение (при Remote-SSH — сервер). Ставить его вручную не обязательно: если
+  подходящего Node нет, XPlain при первом обращении скачает официальную сборку с nodejs.org (~55 МБ, проверка
+  по `SHASUMS256.txt`) в global storage расширения — без sudo и без изменения `PATH`
+  (`xplain.agent.claudexor.autoInstallNode`); см. [руководство](02-user-guide.md#subscription-провайдеры-claudexor).
 - Расширение не требует ничего в рантайме: все зависимости забандлены в `.vsix`.
 
 ## Где выполняется расширение
@@ -17,10 +22,10 @@ XPlain объявлен как `extensionKind: ["workspace"]`. Это значи
 
 ## Вариант A — из готового `.vsix`
 
-1. Возьмите `xplain-<версия>.vsix` (из релиза или соберите по варианту B).
+1. Скачайте `xplain-<платформа>-<версия>.vsix` для своей платформы во вкладке **Releases** репозитория на GitHub (например `xplain-linux-x64-0.2.0.vsix`; при Remote-SSH платформа — сервера), либо соберите по варианту B. Суффикс платформы обязателен: в пакете есть нативный биндинг Cursor SDK.
 2. Установите одним из способов:
    - Extensions → меню `…` → **Install from VSIX…**;
-   - из командной строки: `cursor --install-extension xplain-0.1.0.vsix` (или `code …`).
+   - из командной строки: `cursor --install-extension xplain-linux-x64-0.2.0.vsix` (или `code …`).
 3. Remote-SSH: если вы подключены к удалённой машине и устанавливаете через Extensions-view,
    VS Code сам поставит расширение на удалённую сторону. Если ставите из терминала —
    скопируйте `.vsix` на удалённую машину и выполните там `bash scripts/install.sh путь/к/xplain.vsix`.
@@ -91,4 +96,4 @@ npm run install:ide                     # то же, что scripts/install.sh
 ## Удаление
 
 Extensions → XPlain → Uninstall, либо `cursor --uninstall-extension xplain.xplain`.
-Папку `.xplain/` в проекте и фон в global storage удалите вручную при необходимости.
+Папку `.xplain/` в проекте удалите вручную при необходимости.

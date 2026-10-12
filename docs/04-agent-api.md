@@ -146,8 +146,8 @@ Authorization: Bearer <ключ>                       # если задан к�
 картинкам, **Artifact access**, опционально Excalidraw / Extend mode). Hermes / OpenAI / Anthropic /
 Cursor SDK получают тот же текст через `buildChatPrompt`; провайдер `xplain` — те же поля в JSON.
 Диаграммы — только `.xplain/diagrams/<sessionId>/`. Чужие `sessions/` и `diagrams/<other>/` —
-запрещены, пока пользователь явно не положил результат в draft. Cursor SDK дополнительно включает
-sandbox и пишет managed `.cursorignore`. Канон скилла — `.xplain/skills/<id>/` (offline vendor
+запрещены, пока пользователь явно не положил результат в draft. Cursor SDK пишет managed `.cursorignore`
+(опционально Landlock sandbox через `xplain.agent.cursor.useSandbox`). Канон скилла — `.xplain/skills/<id>/` (offline vendor
 Excalidraw в `references/vendor/`).
 
 #### Элементы `items`
@@ -157,7 +157,7 @@ Excalidraw в `references/vendor/`).
 ```jsonc
 {
   "type": "code",
-  "file": "debug_samples/4_warp_specialization.cu",  // путь относительно корня workspace, POSIX
+  "file": "examples/kernels/warp_specialization.cu",  // путь относительно корня workspace, POSIX
   "startLine": 192, "endLine": 221,                   // 1-based, включительно — фокус объяснения
   "language": "cuda",                                 // languageId VS Code
   "text": "for (int kv_tile = 0; ...\n  ...",         // текст фокус-блока на момент отправки

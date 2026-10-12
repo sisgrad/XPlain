@@ -48,7 +48,10 @@ export async function prepareSkillForProvider(
 async function copyTree(src: vscode.Uri, dst: vscode.Uri): Promise<void> {
   await vscode.workspace.fs.createDirectory(dst);
   for (const [name, type] of await vscode.workspace.fs.readDirectory(src)) {
-    if (name === '.git' || name === '.gitignore') continue;
+    // Never bridge local toolchains into the VSIX / agent discovery dirs.
+    if (name === '.git' || name === '.gitignore' || name === '.venv' || name === 'node_modules' || name === '__pycache__') {
+      continue;
+    }
     const from = vscode.Uri.joinPath(src, name);
     const to = vscode.Uri.joinPath(dst, name);
     if (type === vscode.FileType.Directory) await copyTree(from, to);

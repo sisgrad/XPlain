@@ -92,6 +92,7 @@ Anthropic, Cursor SDK и XPlain HTTP.
 
 Клик по CodeLens открывает выпадающий список (Quick Pick) всех объяснений этого блока:
 заголовок, давность, вопрос. Enter — открыть в панели. У каждого пункта кнопки:
+**Download** (Save As для `result.html` / `result.md` — работает сразу, не ждёт рендер),
 **Open in editor** (предпросмотр Markdown / отдельная вкладка для HTML) и **Add to context**.
 Последний пункт списка — «Add this code block to context» (добавить сам блок мышью, без Shift+X).
 
@@ -121,6 +122,32 @@ Anthropic, Cursor SDK и XPlain HTTP.
 Агент **не** должен подглядывать в другие сессии или чужие диаграммы, пока вы сами не добавили их в контекст
 (см. изоляцию артефактов ниже).
 
+## 5a. Код изменился после объяснения (drift)
+
+XPlain помнит хеш кода, который видел агент, для каждого блока сессии и сравнивает его с текущим
+текстом файла (открытого или на диске). Объяснения **никогда не удаляются и не перегенерируются
+автоматически** — вместо этого показывается степень расхождения:
+
+| Состояние | Что значит | Где видно |
+| --- | --- | --- |
+| *fresh* | Код совпадает. Правки только в комментариях/пробелах тоже считаются fresh | обычный CodeLens |
+| *code changed* | Небольшая правка внутри блока (до `xplain.drift.driftedMaxLines` строк или ≤ `outdatedRatio`) | CodeLens `· $(edit) code changed`, синий чип в History/Result |
+| *outdated* | Изменилась первая значимая строка блока (сигнатура) или большая доля строк | CodeLens `· $(warning) outdated`, жёлтый чип, пунктирная рамка |
+| *lost* | Блок не найден в файле (удалён / переписан) | чип «code not found» в History |
+
+Действия:
+
+- **Show diff** (hover блока, Quick Pick, баннер на Result, History) — открывает VS Code diff
+  «explained ↔ current» для каждого изменённого блока (виртуальные документы, файл не трогается).
+- **Refresh** — один клик: контекст заполняется старым результатом, **текущим** кодом тех же блоков и
+  файлом `code-changes.diff`, вопрос подставляется автоматически («обнови объяснение под текущий код,
+  сохрани верное, исправь устаревшее, укажи изменения в поведении»; на русском при `xplain.explain.language = ru`),
+  и запрос сразу отправляется. По умолчанию результат перезаписывает ту же сессию (как Extend);
+  `xplain.refresh.mode = newSession` создаёт новое объяснение и оставляет старое в History.
+- `xplain.editor.hideOutdated = true` прячет CodeLens для outdated/lost сессий (в History они остаются).
+
+Пороги `xplain.drift.outdatedRatio` (0.3) и `xplain.drift.driftedMaxLines` (10) настраиваются.
+
 ## 6. Повторное использование результата (pick mode)
 
 Чтобы подать уже имеющееся объяснение в **новый** контекст (не overwrite):
@@ -138,7 +165,8 @@ Pick mode выключается повторным Shift+X, кликом по �
 
 - **Markdown** рендерится в панели с подсветкой кода. Ссылки открываются во внешнем браузере.
 - **HTML** (self-contained) показывается в Shadow DOM панели Result; встроенные `data:`-картинки видны,
-  доступа к API VS Code у разметки нет. «Open in editor» открывает HTML в отдельной вкладке.
+  доступа к API VS Code у разметки нет. Большие HTML с диаграммами могут несколько секунд показывать
+  «Rendering…» — **Download** сохраняет файл с диска без ожидания. «Open in editor» — отдельная вкладка.
 - История: вкладка **History** — фильтр по заголовку/вопросу, открытие, добавление в контекст, удаление
   (с подтверждением; удаляются файлы сессии, «осиротевшие» якоря убираются).
 
@@ -149,7 +177,7 @@ Pick mode выключается повторным Shift+X, кликом по �
 `.xplain/diagrams/<текущаяСессия>/`. Диаграммы — пути в HTML, без стриминга base64; XPlain сам
 встраивает PNG при сохранении.
 
-Для **Cursor SDK** дополнительно: sandbox + управляемый блок в `.cursorignore` (маркеры
+Для **Cursor SDK** дополнительно: управляемый блок в `.cursorignore` (маркеры
 `xplain-agent-isolation`), чтобы ignored-пути были недоступны инструментам. Для Hermes/chat —
 контракт в промпте (чат без FS уже изолирован).
 
@@ -157,26 +185,23 @@ Pick mode выключается повторным Shift+X, кликом по �
 
 Шаблон = имя + инструкция для агента + набор текстовых файлов (документация, заметки, примеры).
 
+Три уровня хранения:
+
+| Уровень | Где лежит | Кто правит |
+| --- | --- | --- |
+| **Built-in** | `bundled-templates/` внутри расширения | только чтение; **Duplicate** → user/project |
+| **User** | global storage расширения | вы, во всех проектах |
+| **Project** | `.xplain/templates/<id>/` | вы, в этом workspace (можно коммитить) |
+
 Создание (вкладка **Templates**):
 
 1. Введите имя и инструкцию.
-2. Добавьте файлы: перетащите из Explorer VS Code или из проводника ОС на панель, либо кликните
-   зону «browse…». Ограничение — текстовые файлы до 1 МБ; бинарные пропускаются с предупреждением.
-3. **Save template**. Шаблон появляется в списке ниже и в выпадающем списке на вкладке Context.
+2. Выберите **Save to**: Project или User.
+3. Добавьте файлы: drag-and-drop или «browse…» (текст до 1 МБ).
+4. **Save template**. Шаблон появляется в списке и в выпадающем списке на вкладке Context.
 
-В списке: клик по имени — выбрать/снять для текущего контекста, «карандаш» — редактировать,
-«корзина» — удалить. Все данные лежат в `.xplain/templates/<id>/`.
-
-## 10. Фон панели
-
-- Кнопка с картинкой в заголовке панели или команда **XPlain: Choose Background Image…** — диалог выбора
-  файла (png/jpg/gif/webp/svg/bmp), затем выбор области: *для меня* (все проекты) или *для этого проекта*
-  (`.xplain/ui/`).
-- Перетащите изображение на панель (на любой вкладке, кроме Templates) — тот же результат.
-- Настройки `xplain.ui.background.opacity` (0–1), `blur` (px), `fit` (cover / contain / tile).
-- **XPlain: Clear Background Image** убирает фон (спросит, какой — проектный или пользовательский).
-
-Фон проекта имеет приоритет над пользовательским.
+В списке: клик по имени — выбрать/снять для контекста; у user/project — редактировать/удалить;
+у built-in — копировать в user или project.
 
 ## Вкладка Agent
 
@@ -187,11 +212,53 @@ Pick mode выключается повторным Shift+X, кликом по �
 | Провайдер | Когда выбирать | Поля |
 | --- | --- | --- |
 | **Hermes Agent** | У вас запущен Hermes harness с API-сервером | Base URL (`http://127.0.0.1:8642/v1` — именно API-сервер, **не** адрес Remote gateway из Hermes Desktop), модель/профиль — выбирается из списка, который отдаёт harness, ключ = `API_SERVER_KEY` из `~/.hermes/.env` |
-| **Anthropic (Claude)** | Прямой доступ к Claude | Base URL (`https://api.anthropic.com`), модель (например `claude-sonnet-5`), `max_tokens`, ключ API (обязателен) |
-| **OpenAI / Codex** | OpenAI-модели, в т.ч. Codex, или совместимый сервер (Ollama, vLLM, LiteLLM, OpenRouter) | Base URL (`https://api.openai.com/v1`), модель, ключ API (для локальных серверов не нужен) |
+| **Anthropic / Claude (Subscription)** | У вас подписка Claude Pro/Max, ключ API не нужен | Модель (пусто = по умолчанию у Claude Code); кнопки **Install claude CLI** / **Log in** / **Run doctor** / **Quota** — см. ниже |
+| **Anthropic / Claude (API)** | Прямой доступ к Claude по API-ключу (оплата за токены) | Base URL (`https://api.anthropic.com`), модель (например `claude-sonnet-5`), `max_tokens`, ключ API (обязателен) |
+| **OpenAI / Codex (Subscription)** | У вас подписка ChatGPT Plus/Pro, ключ API не нужен | Модель (пусто = по умолчанию у Codex CLI); кнопки **Install codex CLI** / **Log in** / **Run doctor** / **Quota** |
+| **OpenAI / Codex (API)** | OpenAI-модели по API-ключу, или совместимый сервер (Ollama, vLLM, LiteLLM, OpenRouter) | Base URL (`https://api.openai.com/v1`), модель, ключ API (для локальных серверов не нужен) |
 | **Cursor SDK** | Локальный Cursor-агент через `@cursor/sdk` в текущем workspace | Модель из аккаунта Cursor (напр. `composer-2.5`), API key с [Integrations](https://cursor.com/dashboard/integrations) |
 | **XPlain HTTP agent** | Не в UI; только через `xplain.agent.provider = xplain` — свой сервис по [контракту](04-agent-api.md#контракт-xplain-provider--xplain) | Endpoint (`POST`), ключ — опционально |
 | **Mock (offline)** | Не в UI; только `xplain.agent.provider = mock` для офлайн-проверки | — |
+
+### Subscription-провайдеры (Claudexor)
+
+Варианты **(Subscription)** работают через [Claudexor](https://github.com/razzant/claudexor) — CLI,
+который поставляется **вместе с расширением** (`node_modules/claudexor` внутри VSIX) и управляет
+официальными CLI вендоров: **Claude Code** (подписка Anthropic) и **Codex CLI** (подписка ChatGPT).
+Маршрут выбирается автоматически (`xplain.agent.claudexor.mode = auto`):
+
+- без Excalidraw — read-only `claudexor ask` в приватной папке расширения: агент ничего не пишет,
+  к проекту доступа не получает (весь код уже в промпте);
+- с галочкой Excalidraw — write-capable `claudexor agent --in-place --access workspace_write --no-review`,
+  чтобы скилл мог отрендерить PNG. Где именно он работает, задаёт `xplain.agent.claudexor.project`:
+  `auto` — в папке workspace, **только если это уже git-репозиторий** (Claudexor делает `git init` +
+  baseline-коммит в не-git папках — этого XPlain с вашим проектом не делает); иначе — в приватной
+  per-workspace папке в global storage расширения. Туда копируется скилл Excalidraw
+  (`.xplain/skills/excalidraw-diagram`, для Claude Code ещё `.claude/skills/…`), а готовые
+  `.xplain/diagrams/<sessionId>/` после запуска переносятся в ваш проект и инлайнятся в `result.html`
+  как у остальных провайдеров. Первый рендер в приватной папке потребует разовой установки
+  `uv sync && uv run playwright install chromium` — агент сделает это сам по инструкции скилла.
+
+Требования: **Node.js ≥ 24.15** на машине, где работает расширение (при Remote-SSH — на сервере).
+XPlain ищет его сам (ранее скачанный управляемый runtime, runtime extension host, `PATH`, nvm,
+`/usr/local/bin`). Если ничего не подошло — при первом запросе скачивает официальную сборку с nodejs.org
+(~55 МБ, проверка по `SHASUMS256.txt`) в `<globalStorage>/node-runtime/v<версия>/`; прогресс виден в строке
+состояния и в Output. Скачать заранее можно кнопкой **Node.js runtime** во вкладке Agent (или
+`XPlain: Set Up Subscription Harness…` → `node`). Отключается `xplain.agent.claudexor.autoInstallNode: false`;
+свой бинарник — `xplain.agent.claudexor.nodePath`.
+
+Первичная настройка (один раз, кнопки во вкладке Agent или команда
+**XPlain: Set Up Subscription Harness…**) — всё выполняется в интегрированном терминале:
+
+1. **Install claude/codex CLI** — `claudexor harness install <claude|codex> --target local --yes`
+   ставит CLI вендора в управляемый toolchain `~/.claudexor/`. Если CLI уже установлен и виден в `PATH`
+   (или задан `CLAUDEXOR_CLAUDE_BIN` / `CLAUDEXOR_CODEX_BIN`), шаг не нужен.
+2. **Log in** — `claudexor auth login <claude|codex>`: стандартный логин вендора (браузер / device code).
+3. **Test connection** — `claudexor doctor --harness …`: покажет `installed` / `auth` / доступные модели.
+   **Quota** — текущие окна лимитов подписки.
+
+Claudexor запускает фоновый демон `claudexord` при первом обращении; он остаётся работать между
+запросами (остановить: `claudexor daemon stop`). Логи запросов — в Output → XPlain (`[claudexor] …`).
 
 ### Порядок действий
 
@@ -203,6 +270,12 @@ Pick mode выключается повторным Shift+X, кликом по �
    нет в списке). Если список получить не удалось (сервер не запущен, нет ключа), под полем выводится
    причина и остаётся обычное текстовое поле. Ранее сохранённая модель, которой нет в списке, остаётся
    выбранной с пометкой «not in the server list».
+   Для всех провайдеров, кроме Hermes, под моделью есть поле **Reasoning effort** — уровень усилий
+   рассуждения (пусто — значение модели по умолчанию). OpenAI (API) → `reasoning_effort`
+   (`none…xhigh`), Anthropic (API) → `output_config.effort` (`low…max`), Subscription → `claudexor --effort`
+   (Claudexor подрезает до уровней, которые объявляет модель), Cursor → параметр effort/thinking выбранной
+   модели (список уровней приходит из аккаунта Cursor вместе с моделями; если у модели такого параметра нет,
+   поле подписано и игнорируется). Кнопка ✎ позволяет ввести произвольный уровень, которого нет в списке.
 3. **API key**: вставьте ключ и нажмите **Save key** (или Enter). Ключ сразу сохраняется в защищённое
    хранилище IDE (SecretStorage) отдельно для каждого провайдера; индикатор рядом с заголовком показывает
    `saved` / `not set` / `required`. **Clear** удаляет ключ. В поле ввода ключ никогда не отображается обратно.

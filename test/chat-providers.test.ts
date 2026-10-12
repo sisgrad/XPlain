@@ -295,7 +295,7 @@ describe('OpenAIChatProvider / AnthropicProvider', () => {
 
   after(() => server.close());
 
-  const openai = (overrides: Partial<{ streaming: boolean; apiKey: string; systemPrompt: string; model: string }> = {}) =>
+  const openai = (overrides: Partial<{ streaming: boolean; apiKey: string; systemPrompt: string; model: string; effort: string }> = {}) =>
     new OpenAIChatProvider('hermes', 'Hermes Agent', async () => ({
       baseUrl,
       model: 'hermes-agent',
@@ -305,7 +305,7 @@ describe('OpenAIChatProvider / AnthropicProvider', () => {
       ...overrides,
     }));
 
-  const anthropic = (overrides: Partial<{ streaming: boolean; apiKey?: string }> = {}) =>
+  const anthropic = (overrides: Partial<{ streaming: boolean; apiKey?: string; effort?: string }> = {}) =>
     new AnthropicProvider(async () => ({
       baseUrl: baseUrl.replace(/\/v1$/, ''),
       model: 'claude-sonnet-5',
@@ -376,6 +376,20 @@ describe('OpenAIChatProvider / AnthropicProvider', () => {
     const messages = lastBody.messages as Array<{ role: string }>;
     assert.equal(messages.length, 1);
     assert.equal(messages[0].role, 'user');
+  });
+
+  it('sends reasoning effort only when configured', async () => {
+    mode = 'json';
+    await openai({ streaming: false }).explain(request, { signal: new AbortController().signal });
+    assert.equal('reasoning_effort' in lastBody, false);
+    await openai({ streaming: false, effort: ' high ' }).explain(request, { signal: new AbortController().signal });
+    assert.equal(lastBody.reasoning_effort, 'high');
+
+    mode = 'anthropic-json';
+    await anthropic({ streaming: false }).explain(request, { signal: new AbortController().signal });
+    assert.equal('output_config' in lastBody, false);
+    await anthropic({ streaming: false, effort: 'max' }).explain(request, { signal: new AbortController().signal });
+    assert.deepEqual(lastBody.output_config, { effort: 'max' });
   });
 
   it('Anthropic: parses a JSON message and requires a key', async () => {

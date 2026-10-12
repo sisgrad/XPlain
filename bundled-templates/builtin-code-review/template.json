@@ -1,0 +1,11 @@
+{
+  "id": "builtin-code-review",
+  "scope": "builtin",
+  "name": "Code review",
+  "instruction": "Review the selected code like a careful teammate.\n\nCover:\n1. Correctness bugs and edge cases\n2. API / contract clarity\n3. Readability and naming\n4. Missing tests or assertions\n5. Security or resource leaks if relevant\n\nBe concrete: point at symbols and line ranges. Prefer a short prioritized list over a long essay. Match the explanation language requested by XPlain.",
+  "files": [
+    { "name": "checklist.md", "size": 227 }
+  ],
+  "createdAt": "2026-01-01T00:00:00.000Z",
+  "updatedAt": "2026-01-01T00:00:00.000Z"
+}

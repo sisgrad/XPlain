@@ -1,6 +1,7 @@
 import type { ComponentChildren } from 'preact';
 import { useEffect, useMemo, useState } from 'preact/hooks';
 import type { AgentModelsResult, AgentProviderId, AgentSettings, AgentSettingsView, AgentTestResult, SettingsTarget } from '@shared/types';
+import { EFFORT_LEVELS, SUBSCRIPTION_HARNESS, type EffortProviderId, type SubscriptionProviderId } from '@shared/types';
 import { post } from '../vscode';
 
 interface Props {
@@ -13,9 +14,13 @@ interface Props {
 
 type ChatProviderId = 'hermes' | 'openai' | 'anthropic';
 const isChat = (p: AgentProviderId): p is ChatProviderId => p === 'hermes' || p === 'openai' || p === 'anthropic';
-const hasModelList = (p: AgentProviderId): boolean => isChat(p) || p === 'cursor';
+const isSub = (p: AgentProviderId): p is SubscriptionProviderId => p === 'openaiSubscription' || p === 'anthropicSubscription';
+const hasModelList = (p: AgentProviderId): boolean => isChat(p) || p === 'cursor' || isSub(p);
+const hasEffort = (p: AgentProviderId): p is EffortProviderId => p in EFFORT_LEVELS;
 /** Matches AgentRegistry.CURSOR_MODELS_BASE for listModels result matching. */
 const CURSOR_MODELS_BASE = 'cursor://sdk';
+/** Matches AgentRegistry.CLAUDEXOR_MODELS_BASE. */
+const CLAUDEXOR_MODELS_BASE = 'claudexor://';
 
 let modelsRequestSeq = 0;
 
@@ -35,15 +40,27 @@ const PROVIDERS: Record<AgentProviderId, ProviderInfo> = {
     keyRequired: false,
   },
   anthropic: {
-    label: 'Anthropic (Claude)',
-    summary: 'Anthropic Messages API. Pick any Claude model id.',
+    label: 'Anthropic / Claude (API)',
+    summary: 'Anthropic Messages API, billed per token. Pick any Claude model id.',
     keyHelp: 'Anthropic API key (sk-ant-…). Sent as "x-api-key".',
     keyRequired: true,
   },
   openai: {
-    label: 'OpenAI / Codex',
-    summary: 'OpenAI Chat Completions, or any compatible server (Ollama, vLLM, LiteLLM, OpenRouter…).',
+    label: 'OpenAI / Codex (API)',
+    summary: 'OpenAI Chat Completions (billed per token), or any compatible server (Ollama, vLLM, LiteLLM, OpenRouter…).',
     keyHelp: 'OpenAI API key (sk-…). Sent as "Authorization: Bearer <key>". Optional for local servers.',
+    keyRequired: false,
+  },
+  anthropicSubscription: {
+    label: 'Anthropic / Claude (Subscription)',
+    summary: 'Uses your Claude Pro/Max subscription through the Claude Code CLI, driven by Claudexor (bundled with XPlain). No API key.',
+    keyHelp: '',
+    keyRequired: false,
+  },
+  openaiSubscription: {
+    label: 'OpenAI / Codex (Subscription)',
+    summary: 'Uses your ChatGPT Plus/Pro subscription through the Codex CLI, driven by Claudexor (bundled with XPlain). No API key.',
+    keyHelp: '',
     keyRequired: false,
   },
   cursor: {
@@ -67,7 +84,7 @@ const PROVIDERS: Record<AgentProviderId, ProviderInfo> = {
 };
 
 /** Providers shown in the Agent tab picker. `xplain` / `mock` stay in the backend for settings.json. */
-const UI_PROVIDERS: AgentProviderId[] = ['hermes', 'anthropic', 'openai', 'cursor'];
+const UI_PROVIDERS: AgentProviderId[] = ['hermes', 'anthropicSubscription', 'anthropic', 'openaiSubscription', 'openai', 'cursor'];
 
 export function AgentTab({ settings, test, testing, onTestStart, models: modelsResult }: Props) {
   const [form, setForm] = useState<AgentSettings | null>(null);
@@ -96,9 +113,20 @@ export function AgentTab({ settings, test, testing, onTestStart, models: modelsR
   const providerOptions = UI_PROVIDERS.includes(provider) ? UI_PROVIDERS : [provider, ...UI_PROVIDERS];
   const hasKey = settings?.hasKey[provider] ?? false;
   const chatBaseUrl = form && isChat(provider) ? form[provider].baseUrl.trim() : '';
-  const modelsBaseUrl = provider === 'cursor' ? CURSOR_MODELS_BASE : chatBaseUrl;
+  const modelsBaseUrl = provider === 'cursor' ? CURSOR_MODELS_BASE : isSub(provider) ? CLAUDEXOR_MODELS_BASE : chatBaseUrl;
   const hasKeyForProvider = settings?.hasKey[provider] ?? false;
-  const currentModel = form ? (provider === 'cursor' ? form.cursor.model : isChat(provider) ? form[provider].model : '') : '';
+  const currentModel = form
+    ? provider === 'cursor'
+      ? form.cursor.model
+      : isSub(provider)
+        ? form[provider].model
+        : isChat(provider)
+          ? form[provider].model
+          : ''
+    : '';
+  const harness = isSub(provider) ? SUBSCRIPTION_HARNESS[provider] : undefined;
+  const currentEffort = form && hasEffort(provider) ? form[provider].effort : '';
+  const [manualEffort, setManualEffort] = useState(false);
 
   // Load the model list whenever the provider, base URL or stored key changes.
   const requestModels = (settingsForRequest: AgentSettings) => {
@@ -141,14 +169,32 @@ export function AgentTab({ settings, test, testing, onTestStart, models: modelsR
     setForm((f) => (f ? { ...f, [id]: { ...f[id], ...patch } } : f));
     setDirty(true);
   };
-  const updateCursor = (patch: { model?: string }) => {
+  const updateCursor = (patch: { model?: string; effort?: string }) => {
     setForm((f) => (f ? { ...f, cursor: { ...f.cursor, ...patch } } : f));
+    setDirty(true);
+  };
+  const updateSub = (id: SubscriptionProviderId, patch: { model?: string; effort?: string }) => {
+    setForm((f) => (f ? { ...f, [id]: { ...f[id], ...patch } } : f));
+    setDirty(true);
+  };
+  const updateClaudexor = (patch: Partial<AgentSettings['claudexor']>) => {
+    setForm((f) => (f ? { ...f, claudexor: { ...f.claudexor, ...patch } } : f));
     setDirty(true);
   };
   const setModel = (model: string) => {
     if (provider === 'cursor') updateCursor({ model });
+    else if (isSub(provider)) updateSub(provider, { model });
     else if (isChat(provider)) updateChat(provider, { model });
   };
+  const setEffort = (effort: string) => {
+    if (provider === 'cursor') updateCursor({ effort });
+    else if (isSub(provider)) updateSub(provider, { effort });
+    else if (provider === 'openai' || provider === 'anthropic') updateChat(provider, { effort });
+  };
+  // Cursor advertises effort levels per model; other vendors use a known (open) vocabulary.
+  const serverEfforts = listCurrent && currentModel ? modelsResult!.efforts?.[currentModel] : undefined;
+  const effortLevels = hasEffort(provider) ? (serverEfforts ?? EFFORT_LEVELS[provider]) : [];
+  const cursorNoEffort = provider === 'cursor' && listCurrent && Boolean(currentModel) && models.includes(currentModel) && !serverEfforts;
 
   const parsedHeaders = () => {
     try {
@@ -182,7 +228,7 @@ export function AgentTab({ settings, test, testing, onTestStart, models: modelsR
     if (!headers) return;
     onTestStart();
     post({ type: 'testAgent', settings: { ...form, headers } });
-    if (hasModelList(provider) && (provider === 'cursor' || chatBaseUrl)) requestModels({ ...form, headers });
+    if (hasModelList(provider) && (provider === 'cursor' || isSub(provider) || chatBaseUrl)) requestModels({ ...form, headers });
   };
 
   const saveKey = () => {
@@ -215,7 +261,37 @@ export function AgentTab({ settings, test, testing, onTestStart, models: modelsR
         </section>
       )}
 
-      {(isChat(provider) || provider === 'cursor') && (
+      {isSub(provider) && harness && (
+        <section class="section">
+          <h2>
+            <span class="codicon codicon-account" /> Subscription login ({harness === 'claude' ? 'Claude Code' : 'Codex CLI'})
+          </h2>
+          <p class="small muted">
+            XPlain ships the <code>claudexor</code> CLI; it drives the vendor CLI that is logged in with your subscription. Install the CLI once, log in
+            (opens the vendor's browser/device flow in a terminal), then <em>Test connection</em>. Node.js ≥ 24.15 is downloaded automatically into the extension's storage if the machine has none. With the
+            Excalidraw checkbox on, requests run as a write-capable <code>claudexor agent</code> so the skill can render PNGs (see Advanced).
+          </p>
+          <div class="row">
+            <button class="button small secondary" title={`claudexor harness install ${harness} --target local --yes`} onClick={() => post({ type: 'claudexorSetup', harness, action: 'install' })}>
+              <span class="codicon codicon-cloud-download" /> Install {harness} CLI
+            </button>
+            <button class="button small primary" title={`claudexor auth login ${harness}`} onClick={() => post({ type: 'claudexorSetup', harness, action: 'login' })}>
+              <span class="codicon codicon-sign-in" /> Log in
+            </button>
+            <button class="button small secondary" title={`claudexor doctor --harness ${harness}`} onClick={() => post({ type: 'claudexorSetup', harness, action: 'doctor' })}>
+              <span class="codicon codicon-pulse" /> Run doctor
+            </button>
+            <button class="button small secondary" title="claudexor quota --refresh" onClick={() => post({ type: 'claudexorSetup', harness, action: 'quota' })}>
+              <span class="codicon codicon-graph" /> Quota
+            </button>
+            <button class="button small secondary" title="Download / check the managed Node.js ≥ 24.15 runtime (no sudo, lives in the extension's global storage)" onClick={() => post({ type: 'claudexorSetup', harness, action: 'node' })}>
+              <span class="codicon codicon-package" /> Node.js runtime
+            </button>
+          </div>
+        </section>
+      )}
+
+      {(isChat(provider) || provider === 'cursor' || isSub(provider)) && (
         <section class="section">
           {isChat(provider) && (
             <Field label="Base URL">
@@ -233,7 +309,13 @@ export function AgentTab({ settings, test, testing, onTestStart, models: modelsR
           )}
           <Field
             label={
-              provider === 'hermes' ? 'Model / profile (from the harness)' : provider === 'cursor' ? 'Model (from Cursor account)' : 'Model (from the server)'
+              provider === 'hermes'
+                ? 'Model / profile (from the harness)'
+                : provider === 'cursor'
+                  ? 'Model (from Cursor account)'
+                  : isSub(provider)
+                    ? 'Model (empty = harness default)'
+                    : 'Model (from the server)'
             }
           >
             <div class="row">
@@ -243,7 +325,15 @@ export function AgentTab({ settings, test, testing, onTestStart, models: modelsR
                   type="text"
                   value={currentModel}
                   placeholder={
-                    provider === 'hermes' ? 'hermes-agent' : provider === 'anthropic' ? 'claude-sonnet-5' : provider === 'cursor' ? 'composer-2.5' : 'chat-latest'
+                    provider === 'hermes'
+                      ? 'hermes-agent'
+                      : provider === 'anthropic' || provider === 'anthropicSubscription'
+                        ? 'claude-sonnet-5'
+                        : provider === 'cursor'
+                          ? 'composer-2.5'
+                          : provider === 'openaiSubscription'
+                            ? 'harness default'
+                            : 'chat-latest'
                   }
                   onInput={(e) => setModel(val(e))}
                 />
@@ -254,7 +344,7 @@ export function AgentTab({ settings, test, testing, onTestStart, models: modelsR
                   disabled={loadingModels && models.length === 0}
                   onChange={(e) => setModel((e.target as HTMLSelectElement).value)}
                 >
-                  {!currentModel && <option value="">— select a model —</option>}
+                  {!currentModel && <option value="">{isSub(provider) ? '— harness default —' : '— select a model —'}</option>}
                   {currentModel && !models.includes(currentModel) && (
                     <option value={currentModel}>{currentModel} (not in the server list)</option>
                   )}
@@ -280,7 +370,9 @@ export function AgentTab({ settings, test, testing, onTestStart, models: modelsR
               )}
             </div>
             {loadingModels && models.length === 0 && (
-              <p class="small muted">{provider === 'cursor' ? 'Loading models from Cursor…' : `Loading models from ${chatBaseUrl}…`}</p>
+              <p class="small muted">
+                {provider === 'cursor' ? 'Loading models from Cursor…' : isSub(provider) ? `Asking Claudexor for ${harness} models…` : `Loading models from ${chatBaseUrl}…`}
+              </p>
             )}
             {!loadingModels && modelsError && (
               <p class="small error">
@@ -291,10 +383,50 @@ export function AgentTab({ settings, test, testing, onTestStart, models: modelsR
             {!loadingModels && !modelsError && listCurrent && models.length === 0 && <p class="small muted">No models returned.</p>}
             {!loadingModels && models.length > 0 && (
               <p class="small muted">
-                {models.length} model(s) available{provider === 'cursor' ? '' : ` at ${chatBaseUrl}`}.
+                {models.length} model(s) available{provider === 'cursor' || isSub(provider) ? '' : ` at ${chatBaseUrl}`}.
               </p>
             )}
           </Field>
+          {hasEffort(provider) && (
+            <Field label="Reasoning effort (empty = model default)">
+              <div class="row">
+                {manualEffort ? (
+                  <input class="input" type="text" value={currentEffort} placeholder="e.g. high" list="xplain-effort-levels" onInput={(e) => setEffort(val(e))} />
+                ) : (
+                  <select class="input" value={currentEffort} onChange={(e) => setEffort((e.target as HTMLSelectElement).value)}>
+                    <option value="">— default —</option>
+                    {currentEffort && !effortLevels.includes(currentEffort) && <option value={currentEffort}>{currentEffort} (custom)</option>}
+                    {effortLevels.map((l) => (
+                      <option key={l} value={l}>
+                        {l}
+                      </option>
+                    ))}
+                  </select>
+                )}
+                <datalist id="xplain-effort-levels">
+                  {effortLevels.map((l) => (
+                    <option key={l} value={l} />
+                  ))}
+                </datalist>
+                <button class="icon-button" title={manualEffort ? 'Choose from the list' : 'Type a custom level'} onClick={() => setManualEffort((v) => !v)}>
+                  <span class={`codicon ${manualEffort ? 'codicon-list-flat' : 'codicon-edit'}`} />
+                </button>
+              </div>
+              <p class="small muted">
+                {provider === 'openai'
+                  ? 'Sent as reasoning_effort; supported levels depend on the model.'
+                  : provider === 'anthropic'
+                    ? 'Sent as output_config.effort; most Claude models default to high.'
+                    : isSub(provider)
+                      ? `Passed to Claudexor as --effort; clamped to what the ${harness} model advertises.`
+                      : cursorNoEffort
+                        ? `"${currentModel}" exposes no effort/thinking parameter — this setting is ignored for it.`
+                        : serverEfforts
+                          ? `Levels advertised by Cursor for "${currentModel}".`
+                          : 'Mapped onto the model’s effort/thinking parameter from your Cursor account.'}
+              </p>
+            </Field>
+          )}
           {provider === 'anthropic' && (
             <Field label="max_tokens">
               <input
@@ -310,7 +442,7 @@ export function AgentTab({ settings, test, testing, onTestStart, models: modelsR
         </section>
       )}
 
-      {provider !== 'mock' && (
+      {provider !== 'mock' && !isSub(provider) && (
         <section class="section">
           <h2>
             <span class="codicon codicon-key" /> API key
@@ -372,7 +504,38 @@ export function AgentTab({ settings, test, testing, onTestStart, models: modelsR
               />
             </Field>
           )}
-          {provider !== 'cursor' && (
+          {isSub(provider) && (
+            <>
+              <Field label="claudexor CLI path (empty = bundled with XPlain)">
+                <input class="input" type="text" value={form.claudexor.cliPath} placeholder="/path/to/node_modules/claudexor/bin/claudexor.js" onInput={(e) => updateClaudexor({ cliPath: val(e) })} />
+              </Field>
+              <Field label="Node.js ≥ 24.15 binary (empty = auto-detect / managed download)">
+                <input class="input" type="text" value={form.claudexor.nodePath} placeholder="/usr/local/bin/node" onInput={(e) => updateClaudexor({ nodePath: val(e) })} />
+              </Field>
+              <label class="check">
+                <input type="checkbox" checked={form.claudexor.autoInstallNode} onChange={(e) => updateClaudexor({ autoInstallNode: (e.target as HTMLInputElement).checked })} /> Download Node.js
+                automatically when none ≥ 24.15 is found
+              </label>
+              <Field label="Node.js version to download (empty = extension default)">
+                <input class="input" type="text" value={form.claudexor.nodeVersion} placeholder="24.21.0" onInput={(e) => updateClaudexor({ nodeVersion: val(e) })} />
+              </Field>
+              <Field label="Claudexor route">
+                <select class="select" value={form.claudexor.mode} onChange={(e) => updateClaudexor({ mode: (e.target as HTMLSelectElement).value as AgentSettings['claudexor']['mode'] })}>
+                  <option value="auto">auto — read-only ask; agent run when Excalidraw is on</option>
+                  <option value="ask">ask — always read-only (no PNG diagrams)</option>
+                  <option value="agent">agent — always write-capable in-place run</option>
+                </select>
+              </Field>
+              <Field label="Agent project dir">
+                <select class="select" value={form.claudexor.project} onChange={(e) => updateClaudexor({ project: (e.target as HTMLSelectElement).value as AgentSettings['claudexor']['project'] })}>
+                  <option value="auto">auto — workspace if it is a git repo, else private dir</option>
+                  <option value="workspace">workspace — always (Claudexor git-inits non-git folders!)</option>
+                  <option value="private">private — never touch the project tree; diagrams mirrored back</option>
+                </select>
+              </Field>
+            </>
+          )}
+          {provider !== 'cursor' && !isSub(provider) && (
             <Field label="Extra HTTP headers (one per line: Name: value)">
               <textarea
                 rows={2}
@@ -449,7 +612,10 @@ function stripView(v: AgentSettingsView): AgentSettings {
     hermes: { ...v.hermes },
     openai: { ...v.openai },
     anthropic: { ...v.anthropic },
+    openaiSubscription: { ...v.openaiSubscription },
+    anthropicSubscription: { ...v.anthropicSubscription },
     cursor: { ...v.cursor },
+    claudexor: { ...v.claudexor },
   };
 }
 

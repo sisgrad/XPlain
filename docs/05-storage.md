@@ -20,12 +20,10 @@
     <templateId>/
       template.json               # имя, инструкция, список файлов
       files/<имя файла>           # приложенные файлы
-  ui/
-    background.<ext>              # фон панели для проекта (опционально)
 ```
 
 При Send XPlain также поддерживает блок в корневом `.cursorignore` (`# >>> xplain-agent-isolation`),
-чтобы Cursor SDK sandbox не читал чужие `sessions/` / `diagrams/`.
+чтобы Cursor SDK (`.cursorignore` / опциональный sandbox) не читал чужие `sessions/` / `diagrams/`.
 
 ## `index.json`
 
@@ -35,7 +33,7 @@
   "anchors": [
     {
       "id": "mv2ngpzs-3f1a9c2b",
-      "file": "debug_samples/4_warp_specialization.cu",   // относительный POSIX-путь
+      "file": "examples/kernels/warp_specialization.cu",   // относительный POSIX-путь
       "startLine": 192, "endLine": 221,                    // 1-based, включительно; обновляются при правках
       "textHash": "6f2c…",                                 // sha1 нормализованного текста блока
       "snippet": "for (int kv_tile = 0; …",                // текст блока для повторного поиска
@@ -51,11 +49,17 @@
       "question": "Why does the MMA warp wait here?",
       "resultFormat": "html",                              // всегда "html" для новых сессий; "markdown" — legacy
       "status": "done",                                    // "pending" | "done" | "error"
-      "error": "…"                                         // только при status = error
+      "error": "…",                                        // только при status = error
+      "codeHashes": { "mv2ngpzs-3f1a9c2b": "6f2c…" }       // hashBlock кода, который видел агент, по якорям (drift)
     }
   ]
 }
 ```
+
+`codeHashes` записывается при создании сессии и при Extend/Refresh (`replaceSessionContext`). Для
+сессий, созданных до появления поля, оно восстанавливается при `init()` из `context.json`. Сравнение
+`codeHashes[anchorId]` с текущим текстом блока даёт состояние drift (fresh / drifted / outdated / lost);
+само состояние на диск не пишется — оно вычисляется на лету.
 
 ### Якоря (anchors)
 
@@ -125,12 +129,19 @@
 (без CDN). Нужен только одноразовый Playwright Chromium через `uv` в `references/`. При сбое render
 агент чинит окружение, а не подставляет чужие картинки.
 
-## `templates/<id>/`
+## Шаблоны: три уровня
+
+| Scope | Путь | Запись |
+| --- | --- | --- |
+| `builtin` | `<extension>/bundled-templates/<id>/` | нет (VSIX) |
+| `user` | `<globalStorage>/templates/<id>/` | да |
+| `project` | `.xplain/templates/<id>/` | да |
 
 ```jsonc
 // template.json
 {
-  "id": "mv2nh0ab-77c01d2e",
+  "id": "mv2nh0ab-77c01d2e",   // для builtin — стабильный slug, равен имени папки
+  "scope": "project",          // builtin | user | project (legacy без поля = project)
   "name": "CUDA kernel review",
   "instruction": "Explain memory access patterns…",
   "files": [ { "name": "notes.md", "size": 1834 } ],
@@ -138,14 +149,8 @@
 }
 ```
 
-Файлы хранятся в `files/` под очищенными именами (путь отбрасывается, запрещённые символы заменяются
-на `_`, коллизии получают префикс `_`). При сохранении шаблона папка `files/` перезаписывается целиком.
-Шаблоны можно создавать и руками: достаточно папки с корректным `template.json`, где `id` равен имени папки.
-
-## `ui/background.<ext>`
-
-Фон панели «для этого проекта». Пользовательский фон («для меня») хранится вне проекта —
-в global storage расширения (`context.globalStorageUri`), имя файла запоминается в `globalState`.
+Файлы — в `files/` (имена санитизируются). При save папка `files/` перезаписывается целиком.
+Агрегатор: `src/storage/TemplateLibrary.ts`. Built-in шаблоны лежат в репозитории в `bundled-templates/`.
 
 ## Идентификаторы
 

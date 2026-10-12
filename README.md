@@ -1,77 +1,87 @@
+<p align="center"><img src="assets/social-banner.png" alt="XPlain" width="640"></p>
+
 # XPlain
 
-Explain code with your own LLM agent, directly from VS Code or Cursor.
+[English](README.en.md) · **Русский**
 
-XPlain lets you collect code blocks into a *context*, add a question and an optional
-template (instruction + reference files), send it to an agent and keep every
-answer anchored to the code it explains. Answers are stored in the project
-(`.xplain/`) and surface in the editor as CodeLens entries above the blocks.
+Объяснение кода вашим собственным LLM-агентом прямо из VS Code или Cursor.
 
-Agents are pluggable and configured from the panel's **Agent** tab: a local
-**Hermes Agent** harness, **Anthropic (Claude)**, **OpenAI / Codex** (or any
-OpenAI-compatible server), **Cursor SDK**, your own service speaking the
-**XPlain HTTP contract**, or an offline **mock**.
+XPlain позволяет собирать блоки кода в *контекст*, добавлять вопрос и необязательный шаблон
+(инструкция + файлы-референсы), отправлять это агенту и хранить каждый ответ привязанным к коду,
+который он объясняет. Ответы сохраняются в проекте (`.xplain/`) и показываются в редакторе как
+CodeLens над блоками.
 
-Built only on stable VS Code APIs (no proposed APIs), so it works in VS Code and Cursor,
-locally and through Remote-SSH.
+Агенты подключаемые и настраиваются во вкладке **Agent** панели: локальный harness
+**Hermes Agent**, **Anthropic / Claude** и **OpenAI / Codex** — по API-ключу или через вашу
+**подписку** (Claude Pro/Max, ChatGPT Plus/Pro) с помощью поставляемого в комплекте CLI
+[Claudexor](https://github.com/razzant/claudexor) — **Cursor SDK**, ваш собственный сервис,
+говорящий на **HTTP-контракте XPlain**, или офлайн-**mock**.
 
-Full documentation (installation, user guide, configuration, agent providers, storage format,
-architecture, development, troubleshooting) lives in the `docs/` folder of the repository
-(start with `docs/README.md`).
+Используются только стабильные API VS Code (без proposed API), поэтому расширение работает в
+VS Code и Cursor, локально и через Remote-SSH.
 
-## Workflow
+Полная документация (установка, руководство пользователя, конфигурация, провайдеры агентов, формат
+хранения, архитектура, разработка, устранение неполадок) — в папке `docs/` репозитория
+(начните с `docs/README.md`).
 
-1. Select a block of code and press **Shift+X**. The block appears in the XPlain panel as
-   `file.cu L61-L224`. Repeat for more blocks (sub-ranges are tracked separately). On send, the
-   whole file is attached as surrounding context, but the agent is told to explain only the block.
-2. In the panel, optionally type a question, pick a template, choose the explanation language
-   (English / Russian), and optionally enable **Draw diagrams with the Excalidraw skill**
+Готовые установочные файлы `xplain-<платформа>-<версия>.vsix` — во вкладке **Releases** репозитория
+на GitHub (суффикс платформы важен: поставляемый Cursor SDK содержит нативный биндинг tree-sitter).
+
+## Рабочий процесс
+
+1. Выделите блок кода и нажмите **Shift+X**. Блок появится в панели XPlain как
+   `file.cu L61-L224`. Повторите для других блоков (вложенные диапазоны отслеживаются отдельно).
+   При отправке весь файл прикладывается как окружающий контекст, но агенту сказано объяснять
+   только блок.
+2. В панели при желании введите вопрос, выберите шаблон, язык объяснения (английский / русский) и
+   включите **Draw diagrams with the Excalidraw skill**
    ([coleam00/excalidraw-diagram-skill](https://github.com/coleam00/excalidraw-diagram-skill) —
-   XPlain stores it in `.xplain/skills/` and adapts it for the selected agent on send).
-3. Press **Send to agent** (or Ctrl+Enter in the question box). Nothing is sent until you confirm.
-   You can also drop text files onto the **Context** tab as attachments.
-4. The answer streams into the **Result** tab and is saved as a self-contained
-   `.xplain/sessions/<id>/result.html` (Markdown is wrapped into HTML; diagram paths under
-   `.xplain/diagrams/<sessionId>/` are inlined as `data:` URIs). Agents must not reuse other
-   sessions' artifacts unless you explicitly add them to the draft.
-5. Every block that was part of the context gets a CodeLens: `XPlain: <title>` or
-   `XPlain: 3 explanations · <latest title>`. Clicking it opens a dropdown of all explanations
-   attached to that block; titles are chat-like summaries, not `v1`/`v2`.
-6. **Extend** on the Result tab revises that explanation in place (follow-up question, more blocks,
-   files → **Send (overwrite)**). Pick mode (Shift+X outside the editor) still adds a prior result
-   into a *new* context without overwriting.
+   XPlain хранит скилл в `.xplain/skills/` и адаптирует его под выбранного агента при отправке).
+3. Нажмите **Send to agent** (или Ctrl+Enter в поле вопроса). Ничего не отправляется без вашего
+   подтверждения. Текстовые файлы можно также перетащить во вкладку **Context** как вложения.
+4. Ответ стримится во вкладку **Result** и сохраняется как самодостаточный
+   `.xplain/sessions/<id>/result.html` (Markdown оборачивается в HTML; пути к диаграммам в
+   `.xplain/diagrams/<sessionId>/` встраиваются как `data:`-URI). Агентам запрещено переиспользовать
+   артефакты других сессий, если вы явно не добавили их в черновик.
+5. Каждый блок, входивший в контекст, получает CodeLens: `XPlain: <заголовок>` или
+   `XPlain: 3 explanations · <последний заголовок>`. Клик открывает список всех объяснений,
+   привязанных к блоку; заголовки — краткие резюме в стиле чата, а не `v1`/`v2`.
+6. **Extend** во вкладке Result дорабатывает это объяснение на месте (уточняющий вопрос, ещё блоки,
+   файлы → **Send (overwrite)**). Pick-режим (Shift+X вне редактора) по-прежнему добавляет прежний
+   результат в *новый* контекст без перезаписи.
 
-### Keyboard
+### Клавиши
 
-| Shortcut | Where | Action |
+| Сочетание | Где | Действие |
 | --- | --- | --- |
-| `Shift+X` | editor with a selection | add the selection to the context |
-| `Shift+X` | anywhere outside the editor (sidebar, explorer, panel) | toggle pick mode |
-| `Ctrl+Enter` | question box | send |
+| `Shift+X` | редактор с выделением | добавить выделение в контекст |
+| `Shift+X` | где угодно вне редактора (сайдбар, проводник, панель) | переключить pick-режим |
+| `Ctrl+Enter` | поле вопроса | отправить |
 
-`Shift+X` with a selection replaces typing a capital `X` over the selection. Change the
-binding in *Keyboard Shortcuts* (`xplain.addSelectionToContext`) if that bothers you.
+`Shift+X` при выделении заменяет ввод заглавной `X` поверх выделения. Если это мешает, измените
+привязку в *Keyboard Shortcuts* (`xplain.addSelectionToContext`).
 
-## Installation
+## Установка
 
-### Option A - from a `.vsix`
+### Вариант A — из `.vsix`
 
-1. Download or build `xplain-<version>.vsix` (see Option B).
-2. In VS Code / Cursor: Extensions view -> `...` menu -> **Install from VSIX...**.
-   From the command line: `cursor --install-extension xplain-0.2.0.vsix` (or `code ...`).
-3. **Remote-SSH**: the extension runs on the remote side (`extensionKind: workspace`).
-   Copy the `.vsix` to the remote machine and run `bash scripts/install.sh path/to/xplain.vsix`
-   there, or install from the Extensions view while connected (it is installed remotely automatically).
-4. Reload the window.
+1. Скачайте файл для своей платформы во вкладке **Releases** на GitHub (например
+   `xplain-linux-x64-0.2.0.vsix`; при Remote-SSH платформа — сервера) или соберите сами, см. вариант B.
+2. В VS Code / Cursor: вид Extensions → меню `...` → **Install from VSIX...**.
+   Из командной строки: `cursor --install-extension xplain-linux-x64-0.2.0.vsix` (или `code ...`).
+3. **Remote-SSH**: расширение работает на удалённой стороне (`extensionKind: workspace`).
+   Скопируйте `.vsix` на удалённую машину и выполните там `bash scripts/install.sh path/to/xplain.vsix`,
+   либо установите из вида Extensions при подключении (оно установится удалённо автоматически).
+4. Перезагрузите окно.
 
-### Option B - from sources (dependencies are installed automatically)
+### Вариант B — из исходников (зависимости ставятся автоматически)
 
-The setup script checks for Node.js >= 20 and installs it when missing (via `nvm` into your
-home directory on Linux/macOS, no `sudo`; via `winget` on Windows), installs npm
-dependencies, builds and packages the extension.
+Скрипт установки проверяет Node.js ≥ 20 и ставит его при отсутствии (через `nvm` в домашний
+каталог на Linux/macOS, без `sudo`; через `winget` на Windows), устанавливает npm-зависимости,
+собирает и упаковывает расширение.
 
 ```bash
-# Linux / macOS / WSL (add --install to also install into Cursor/VS Code)
+# Linux / macOS / WSL (добавьте --install, чтобы сразу установить в Cursor/VS Code)
 bash scripts/setup.sh --install
 ```
 
@@ -80,65 +90,75 @@ bash scripts/setup.sh --install
 powershell -ExecutionPolicy Bypass -File scripts\setup.ps1 -Install
 ```
 
-`scripts/install.sh` detects `cursor`, `code`, and the Remote-SSH server CLIs
-(`~/.cursor-server`, `~/.vscode-server`) and runs `--install-extension` for you.
+`scripts/install.sh` находит `cursor`, `code` и CLI серверов Remote-SSH
+(`~/.cursor-server`, `~/.vscode-server`) и запускает `--install-extension` за вас.
 
-### Option C - development
+### Вариант C — разработка
 
 ```bash
-bash scripts/setup.sh --no-package   # or: npm install && npm run build
-npm run watch                        # rebuild on change
+bash scripts/setup.sh --no-package   # или: npm install && npm run build
+npm run watch                        # пересборка при изменениях
 ```
 
-Press **F5** to launch the Extension Development Host with `debug_samples/` opened.
+Нажмите **F5**, чтобы запустить Extension Development Host (откройте в нём любую папку с кодом).
 
-## Choosing an agent
+## Выбор агента
 
-Open the **Agent** tab in the XPlain panel (or click the agent name in the footer of the
-Context tab, or run **XPlain: Configure Agent**). Pick a provider, fill in its fields, paste
-the API key (stored in the IDE's secret storage, never in `settings.json` or `.xplain/`),
-press **Test connection** and then **Save** (to your user settings or to this workspace).
+Откройте вкладку **Agent** в панели XPlain (или кликните имя агента в подвале вкладки Context, или
+выполните **XPlain: Configure Agent**). Выберите провайдера, заполните его поля, вставьте API-ключ
+(хранится в защищённом хранилище IDE, никогда — в `settings.json` или `.xplain/`), нажмите
+**Test connection**, затем **Save** (в пользовательские настройки или в этот workspace).
 
-| Provider | What it talks to | Fields |
+| Провайдер | С чем общается | Поля |
 | --- | --- | --- |
-| **Hermes Agent** | Hermes harness **API server** (OpenAI-compatible, port 8642) — not the dashboard/Remote-gateway URL Hermes Desktop uses. Enable it with `API_SERVER_ENABLED=true`, `API_SERVER_KEY=...` (and `API_SERVER_HOST=0.0.0.0` for remote access) in `~/.hermes/.env`. | Base URL (`http://127.0.0.1:8642/v1`), model/profile picked from the list the harness reports, key = `API_SERVER_KEY`. Tool-progress events are ignored, the final answer is streamed. |
-| **Anthropic (Claude)** | Anthropic Messages API. | Base URL, model picked from the server list, `max_tokens`, API key (`x-api-key`). |
-| **OpenAI / Codex** | OpenAI Chat Completions, or any compatible server (Ollama, vLLM, LiteLLM, OpenRouter). | Base URL (`https://api.openai.com/v1`), model picked from the server list, API key (Bearer). |
-| **Cursor SDK** | Local Cursor agent via `@cursor/sdk` against this workspace. | Model from your Cursor account (e.g. `composer-2.5`), API key from [Integrations](https://cursor.com/dashboard/integrations). |
-| **XPlain HTTP agent** | Your own service speaking the contract below. | Endpoint URL, optional Bearer key. |
-| **Mock (offline)** | Built-in canned answer. | - |
+| **Hermes Agent** | **API-сервер** Hermes harness (OpenAI-совместимый, порт 8642) — не URL дашборда/Remote-gateway, который использует Hermes Desktop. Включается через `API_SERVER_ENABLED=true`, `API_SERVER_KEY=...` (и `API_SERVER_HOST=0.0.0.0` для удалённого доступа) в `~/.hermes/.env`. | Base URL (`http://127.0.0.1:8642/v1`), модель/профиль из списка, который сообщает harness, ключ = `API_SERVER_KEY`. События прогресса инструментов игнорируются, финальный ответ стримится. |
+| **Anthropic / Claude (Subscription)** | Ваш логин Claude Pro/Max через Claude Code CLI под управлением поставляемого Claudexor: read-only `ask` либо `agent`-запуск с правом записи, когда запрошены диаграммы Excalidraw (в workspace, если это git-репозиторий, иначе в приватной папке с переносом диаграмм обратно). Node.js ≥ 24.15 скачивается автоматически при отсутствии. | Модель (пусто = по умолчанию у harness). Кнопки вкладки Agent: Install claude CLI → Log in → Test connection. Без API-ключа. |
+| **Anthropic / Claude (API)** | Anthropic Messages API (оплата за токены). | Base URL, модель из списка сервера, `max_tokens`, API-ключ (`x-api-key`). |
+| **OpenAI / Codex (Subscription)** | Ваш логин ChatGPT Plus/Pro через Codex CLI под управлением поставляемого Claudexor. Node.js ≥ 24.15 скачивается автоматически при отсутствии. | Модель (пусто = по умолчанию у harness). Install codex CLI → Log in → Test connection. Без API-ключа. |
+| **OpenAI / Codex (API)** | OpenAI Chat Completions или любой совместимый сервер (Ollama, vLLM, LiteLLM, OpenRouter). | Base URL (`https://api.openai.com/v1`), модель из списка сервера, API-ключ (Bearer). |
+| **Cursor SDK** | Локальный агент Cursor через `@cursor/sdk` в этом workspace. | Модель из аккаунта Cursor (например `composer-2.5`), API-ключ из [Integrations](https://cursor.com/dashboard/integrations). |
+| **XPlain HTTP agent** | Ваш сервис, реализующий контракт ниже. | URL эндпоинта, необязательный Bearer-ключ. |
+| **Mock (offline)** | Встроенный заготовленный ответ. | — |
 
-The **Model** dropdown is filled from the server's `/models` endpoint automatically (when the tab
-opens, when the provider, base URL or key changes, or via the refresh button); if the list cannot be
-fetched you can type the id manually. **Test connection** verifies the same endpoint and reports
-whether the chosen model is offered. For chat providers the context is rendered into one user
-message (templates, previous results, fenced code blocks with `L` ranges, question) preceded by a
-system prompt that asks for a Markdown answer starting with a short `#` title; override it under
-*Advanced -> System prompt*.
+Для всех провайдеров, кроме Hermes, под моделью есть поле **Reasoning effort** — уровень усилий
+рассуждения (OpenAI `reasoning_effort`, Anthropic `output_config.effort`, Claudexor `--effort`,
+параметр effort/thinking модели Cursor); пусто = значение модели по умолчанию.
 
-## Configuration
+Выпадающий список **Model** заполняется автоматически с эндпоинта `/models` сервера (при открытии
+вкладки, смене провайдера, base URL или ключа, либо кнопкой обновления); если список получить не
+удалось, id можно ввести вручную. **Test connection** проверяет тот же эндпоинт и сообщает, доступна
+ли выбранная модель. Для чат-провайдеров контекст рендерится в одно пользовательское сообщение
+(шаблоны, предыдущие результаты, блоки кода с диапазонами `L`, вопрос), которому предшествует
+системный промпт с просьбой ответить в Markdown, начиная с короткого заголовка `#`; переопределяется в
+*Advanced → System prompt*.
 
-| Setting | Default | Description |
+## Конфигурация
+
+| Настройка | По умолчанию | Описание |
 | --- | --- | --- |
-| `xplain.agent.provider` | `xplain` | `xplain`, `hermes`, `openai`, `anthropic` or `mock`. |
-| `xplain.agent.endpoint` | `http://127.0.0.1:8765/explain` | [xplain] URL that receives the context. |
-| `xplain.agent.hermes.baseUrl` / `model` | `http://127.0.0.1:8642/v1` / `hermes-agent` | [hermes] API server and model/profile. |
-| `xplain.agent.openai.baseUrl` / `model` | `https://api.openai.com/v1` / `chat-latest` | [openai] API base and model id. |
-| `xplain.agent.anthropic.baseUrl` / `model` / `maxTokens` | `https://api.anthropic.com` / `claude-sonnet-5` / `8192` | [anthropic] API base, model, `max_tokens`. |
-| `xplain.agent.systemPrompt` | `""` | [hermes/openai/anthropic] Custom system prompt; empty = built-in. |
-| `xplain.agent.timeoutMinutes` | `10` | Idle timeout in minutes (resets on every received chunk / keepalive). |
-| `xplain.agent.streaming` | `true` | Stream partial output (NDJSON or SSE). |
-| `xplain.agent.headers` | `{}` | Extra headers sent to any provider. |
-| `xplain.editor.showCodeLens` | `true` | CodeLens above explained blocks. |
-| `xplain.editor.highlightBlocks` | `true` | Gutter icon / hover for explained blocks. |
-| `xplain.ui.background.opacity` / `blur` / `fit` | `0.18` / `0` / `cover` | Panel background image. |
+| `xplain.agent.provider` | `xplain` | `xplain`, `hermes`, `openai`, `anthropic`, `openaiSubscription`, `anthropicSubscription`, `cursor` или `mock`. |
+| `xplain.agent.endpoint` | `http://127.0.0.1:8765/explain` | [xplain] URL, принимающий контекст. |
+| `xplain.agent.hermes.baseUrl` / `model` | `http://127.0.0.1:8642/v1` / `hermes-agent` | [hermes] API-сервер и модель/профиль. |
+| `xplain.agent.openai.baseUrl` / `model` | `https://api.openai.com/v1` / `chat-latest` | [openai] База API и id модели. |
+| `xplain.agent.anthropic.baseUrl` / `model` / `maxTokens` | `https://api.anthropic.com` / `claude-sonnet-5` / `8192` | [anthropic] База API, модель, `max_tokens`. |
+| `xplain.agent.openaiSubscription.model` / `xplain.agent.anthropicSubscription.model` | `""` | [subscription] Id модели для Codex CLI / Claude Code; пусто = по умолчанию у harness. |
+| `xplain.agent.<provider>.effort` (openai, anthropic, openaiSubscription, anthropicSubscription, cursor) | `""` | Reasoning effort: OpenAI `reasoning_effort`, Anthropic `output_config.effort`, Claudexor `--effort`, параметр effort/thinking модели Cursor. Пусто = по умолчанию модели. |
+| `xplain.agent.claudexor.cliPath` / `nodePath` | `""` | Переопределить поставляемый CLI `claudexor` / Node.js ≥ 24.15 для его запуска (по умолчанию определяются автоматически). |
+| `xplain.agent.claudexor.autoInstallNode` / `nodeVersion` | `true` / `""` | Если Node ≥ 24.15 не найден — скачать официальную сборку с проверкой контрольной суммы с nodejs.org в global storage расширения (без sudo, `PATH` не меняется). |
+| `xplain.agent.claudexor.mode` / `project` | `auto` / `auto` | Маршрут `ask` или `agent` с правом записи; где работает `agent` (workspace, если git, иначе приватная папка). |
+| `xplain.agent.systemPrompt` | `""` | [hermes/openai/anthropic] Свой системный промпт; пусто = встроенный. |
+| `xplain.agent.timeoutMinutes` | `10` | Idle-таймаут в минутах (сбрасывается каждым полученным чанком / keepalive). |
+| `xplain.agent.streaming` | `true` | Стримить частичный вывод (NDJSON или SSE). |
+| `xplain.agent.headers` | `{}` | Дополнительные заголовки для любого провайдера. |
+| `xplain.editor.showCodeLens` | `true` | CodeLens над объяснёнными блоками. |
+| `xplain.editor.highlightBlocks` | `true` | Иконка в gutter / hover у объяснённых блоков. |
 
-API keys are per provider. Set them in the Agent tab or via **XPlain: Set Agent API Key** /
-**XPlain: Clear Agent API Key** (both ask which provider).
+API-ключи задаются отдельно для каждого провайдера — во вкладке Agent или командами
+**XPlain: Set Agent API Key** / **XPlain: Clear Agent API Key** (обе спрашивают провайдера).
 
-### XPlain agent HTTP contract
+### HTTP-контракт агента XPlain
 
-Request (`POST` to `xplain.agent.endpoint`, `Content-Type: application/json`):
+Запрос (`POST` на `xplain.agent.endpoint`, `Content-Type: application/json`):
 
 ```json
 {
@@ -146,7 +166,7 @@ Request (`POST` to `xplain.agent.endpoint`, `Content-Type: application/json`):
   "question": "Why does the MMA warp wait on this barrier?",
   "workspace": "XPlain",
   "items": [
-    { "type": "code", "file": "debug_samples/4_warp_specialization.cu",
+    { "type": "code", "file": "examples/kernels/warp_specialization.cu",
       "startLine": 192, "endLine": 221, "language": "cuda", "text": "for (int kv_tile ..." },
     { "type": "result", "title": "Pipeline overview", "format": "markdown", "content": "# ..." },
     { "type": "template", "name": "CUDA review", "instruction": "Focus on ...",
@@ -155,13 +175,13 @@ Request (`POST` to `xplain.agent.endpoint`, `Content-Type: application/json`):
 }
 ```
 
-Response, either a single JSON document:
+Ответ — либо один JSON-документ:
 
 ```json
 { "title": "Barrier phases in the KV loop", "format": "markdown", "content": "# ..." }
 ```
 
-or an NDJSON stream (`Content-Type: application/x-ndjson`), one JSON object per line:
+либо NDJSON-поток (`Content-Type: application/x-ndjson`), по одному JSON-объекту на строку:
 
 ```
 {"type":"delta","text":"The MMA warp "}
@@ -169,51 +189,45 @@ or an NDJSON stream (`Content-Type: application/x-ndjson`), one JSON object per 
 {"type":"done","title":"Barrier phases in the KV loop","format":"markdown"}
 ```
 
-`format` is `markdown` or `html` (self-contained HTML is rendered in a sandboxed iframe).
-If `title` is omitted XPlain derives one from the first heading, the question or the code.
+`format` — `markdown` или `html` (самодостаточный HTML рендерится в sandbox-iframe).
+Если `title` опущен, XPlain выводит его из первого заголовка, вопроса или кода.
 
-A stdlib-only reference implementation lives in `examples/agent_server.py`:
+Референсная реализация только на stdlib — `examples/agent_server.py`:
 
 ```bash
-python3 examples/agent_server.py --port 8765   # then keep the default endpoint setting
+python3 examples/agent_server.py --port 8765   # затем оставьте эндпоинт по умолчанию
 ```
 
-Replace its `explain()` generator with a call into your agent system.
+Замените его генератор `explain()` вызовом вашей агентной системы.
 
-## Templates
+## Шаблоны
 
-Templates bundle an instruction and reference files. In the **Templates** tab, drag files from
-the Explorer or from your computer onto the panel (or click the drop zone to browse), write the
-instruction and save. Select a template in the **Context** tab before sending; its instruction
-and files are included in the request. Templates live in `.xplain/templates/<id>/`.
+Шаблон объединяет инструкцию и файлы-референсы. Во вкладке **Templates** перетащите файлы из
+проводника или с компьютера на панель (или кликните зону перетаскивания, чтобы выбрать), напишите
+инструкцию и сохраните. Выберите шаблон во вкладке **Context** перед отправкой; его инструкция и
+файлы войдут в запрос. Шаблоны хранятся в `.xplain/templates/<id>/`.
 
-## Panel background
-
-**XPlain: Choose Background Image...** (title bar icon) or drop an image onto the panel. You
-can store it for yourself (all projects) or for this project (`.xplain/ui/`). Tune
-`xplain.ui.background.*` for opacity, blur and fit; **XPlain: Clear Background Image** removes it.
-
-## Storage layout
+## Структура хранения
 
 ```
 .xplain/
-  index.json                      anchors (file, lines, hash, snippet) and session metadata
-  sessions/<id>/context.json      everything that was sent, with the title and status
-  sessions/<id>/result.html       the agent's answer (self-contained HTML)
-  templates/<id>/template.json    name, instruction, file list
-  templates/<id>/files/...        attached files
-  ui/background.<ext>             optional per-project panel background
+  index.json                      якоря (файл, строки, хэш, фрагмент) и метаданные сессий
+  sessions/<id>/context.json      всё, что было отправлено, с заголовком и статусом
+  sessions/<id>/result.html       ответ агента (самодостаточный HTML)
+  templates/<id>/template.json    имя, инструкция, список файлов
+  templates/<id>/files/...        приложенные файлы
 ```
 
-Anchors follow edits: ranges are shifted as you type, and blocks are re-found by content when
-a file is reopened. Edited blocks keep their explanations and adopt the new text on save.
-Commit `.xplain/` if you want to share explanations with your team.
+Якоря следуют за правками: диапазоны сдвигаются при вводе, а блоки заново находятся по содержимому
+при повторном открытии файла. Отредактированные блоки сохраняют объяснения и принимают новый текст
+при сохранении. Коммитьте `.xplain/`, если хотите делиться объяснениями с командой.
 
-## Development
+## Разработка
 
 ```bash
-npm run check    # type-check extension + webview
+npm run check    # проверка типов расширения + webview
 npm run lint
-npm test         # mocha unit tests (storage, anchors, titles, draft, providers)
-npm run package  # dist/xplain-<version>.vsix
+npm test         # mocha-тесты (хранилище, якоря, заголовки, черновик, провайдеры)
+npm run package  # dist/xplain-<платформа>-<версия>.vsix
+npm run release  # то же; файл для публикации в GitHub Releases
 ```

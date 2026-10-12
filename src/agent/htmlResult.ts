@@ -59,13 +59,30 @@ export function extractHtmlTitle(html: string): string | undefined {
  */
 export function ensureSelfContainedHtml(content: string, fallbackTitle = 'XPlain explanation'): string {
   const raw = unwrapHtmlFence(content);
-  if (detectHtml(raw)) {
-    return ensureHasTitle(raw, fallbackTitle);
+  // Agents often preface the document ("Here is the explanation.") — keep the HTML part.
+  const embedded = extractLeadingHtmlDocument(raw);
+  const doc = embedded ?? raw;
+  if (detectHtml(doc)) {
+    return ensureHasTitle(doc, fallbackTitle);
   }
-  if (looksLikeHtmlFragment(raw)) {
-    return wrapHtmlFragment(raw, fallbackTitle);
+  if (looksLikeHtmlFragment(doc)) {
+    return wrapHtmlFragment(doc, fallbackTitle);
   }
   return wrapMarkdownAsHtml(raw, fallbackTitle);
+}
+
+/** If `text` has a short preamble before `<!DOCTYPE html>` / `<html>`, return that document. */
+function extractLeadingHtmlDocument(text: string): string | undefined {
+  const trimmed = text.trim();
+  if (detectHtml(trimmed)) return trimmed;
+  const doctype = trimmed.search(/<!DOCTYPE\s+html/i);
+  const htmlTag = trimmed.search(/<html[\s>]/i);
+  const start = doctype >= 0 ? doctype : htmlTag;
+  if (start < 0 || start > 4_000) return undefined;
+  const slice = trimmed.slice(start);
+  const end = slice.search(/<\/html>/i);
+  if (end < 0) return undefined;
+  return slice.slice(0, end + '</html>'.length).trim() || undefined;
 }
 
 function ensureHasTitle(html: string, fallbackTitle: string): string {

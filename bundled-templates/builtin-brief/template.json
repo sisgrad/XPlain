@@ -1,0 +1,9 @@
+{
+  "id": "builtin-brief",
+  "scope": "builtin",
+  "name": "Brief",
+  "instruction": "Explain the selected code briefly, in a few sentences (3–6). State what it does, why it exists in this context, and the one or two non-obvious details a reader must know. No diagrams, no step-by-step walkthrough, no restating the code. Match the explanation language requested by XPlain.",
+  "files": [],
+  "createdAt": "2026-01-01T00:00:00.000Z",
+  "updatedAt": "2026-01-01T00:00:00.000Z"
+}

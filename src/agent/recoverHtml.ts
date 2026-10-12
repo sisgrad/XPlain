@@ -1,6 +1,9 @@
 /**
  * When an agent (especially Cursor SDK) writes the real HTML to a workspace file
  * and returns a stub chat message, recover the document from disk.
+ *
+ * Also extracts a full HTML document embedded after a short chat preamble
+ * ("Here is the explanation.\n\n<!DOCTYPE html>...").
  */
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
@@ -10,6 +13,10 @@ const HTML_PATH_RE = /(?:^|[\s"'`(])((?:\/|(?:\.\.?\/)?|\w:\\)[^\s"'`<>)]+?\.htm
 
 const STUB_HINT =
   /не помещается|does not fit|too large|saved (?:to|as)|wrote (?:to|the)|open (?:this|the) file|cat\s+\S+\.html|полный html|full html.*(?:file|файл)/i;
+
+/** Excalidraw offline render shell — never a finished XPlain explanation. */
+const RENDER_TEMPLATE_SHELL =
+  /id=["']root["'][\s\S]*renderDiagram|ExcalidrawExport|excalidraw-export\.iife/i;
 
 export interface RecoverHtmlOptions {
   /** Workspace root(s) used to resolve relative paths. */
@@ -27,7 +34,14 @@ export interface RecoverHtmlOptions {
  */
 export async function recoverHtmlAnswer(content: string, opts: RecoverHtmlOptions): Promise<{ html: string; recoveredFrom?: string }> {
   const raw = unwrapHtmlFence(content).trim();
-  if (isCompleteHtmlDocument(raw) && !STUB_HINT.test(raw)) {
+  const embedded = extractEmbeddedHtmlDocument(raw);
+
+  // Prefer a real explanation embedded in the chat over any on-disk candidate.
+  if (embedded && isCompleteHtmlDocument(embedded) && !isRenderTemplateShell(embedded)) {
+    return { html: embedded };
+  }
+
+  if (isCompleteHtmlDocument(raw) && !STUB_HINT.test(raw) && !isRenderTemplateShell(raw)) {
     return { html: raw };
   }
 
@@ -43,9 +57,10 @@ export async function recoverHtmlAnswer(content: string, opts: RecoverHtmlOption
 
   let best: { path: string; html: string; score: number } | undefined;
   for (const abs of unique(candidates)) {
+    if (shouldSkipRecoveryPath(abs)) continue;
     try {
       const html = await fs.readFile(abs, 'utf8');
-      if (!isCompleteHtmlDocument(html)) continue;
+      if (!isCompleteHtmlDocument(html) || isRenderTemplateShell(html)) continue;
       const score = html.length + htmlAssetBonus(html);
       if (!best || score > best.score) best = { path: abs, html, score };
     } catch {
@@ -53,10 +68,55 @@ export async function recoverHtmlAnswer(content: string, opts: RecoverHtmlOption
     }
   }
 
-  if (best && (!isCompleteHtmlDocument(raw) || best.html.length > raw.length * 1.2 || STUB_HINT.test(raw))) {
+  const baseline = embedded && !isRenderTemplateShell(embedded) ? embedded : raw;
+  const baselineLen = isCompleteHtmlDocument(baseline) || embedded ? baseline.length : 0;
+
+  if (
+    best &&
+    best.html.length >= Math.max(400, baselineLen) &&
+    (!isCompleteHtmlDocument(baseline) ||
+      isRenderTemplateShell(baseline) ||
+      best.html.length > baselineLen * 1.2 ||
+      STUB_HINT.test(raw))
+  ) {
     return { html: best.html, recoveredFrom: best.path };
   }
+
+  if (embedded && !isRenderTemplateShell(embedded)) return { html: embedded };
   return { html: raw };
+}
+
+/** Pull `<!DOCTYPE html>…</html>` (or `<html>…</html>`) out of a chat preamble. */
+export function extractEmbeddedHtmlDocument(text: string): string | undefined {
+  const trimmed = text.trim();
+  if (detectHtml(trimmed)) return trimmed;
+  const doctype = trimmed.search(/<!DOCTYPE\s+html/i);
+  const htmlTag = trimmed.search(/<html[\s>]/i);
+  const start = doctype >= 0 ? doctype : htmlTag;
+  if (start < 0) return undefined;
+  // Preamble must stay short — avoid grabbing HTML from huge unrelated logs.
+  if (start > 4_000) return undefined;
+  const slice = trimmed.slice(start);
+  const end = slice.search(/<\/html>/i);
+  if (end < 0) return undefined;
+  const doc = slice.slice(0, end + '</html>'.length).trim();
+  return doc || undefined;
+}
+
+export function isRenderTemplateShell(html: string): boolean {
+  if (!RENDER_TEMPLATE_SHELL.test(html)) return false;
+  // Real explanations with diagrams reference PNGs / data URIs; the shell does not.
+  if (/data:image\//i.test(html)) return false;
+  if (/<img[^>]+src=["'][^"']+\.(?:png|jpe?g|gif|webp|svg)/i.test(html)) return false;
+  return html.length < 12_000;
+}
+
+function shouldSkipRecoveryPath(abs: string): boolean {
+  const norm = abs.replace(/\\/g, '/').toLowerCase();
+  // Skill / vendor templates are not user explanations.
+  if (norm.includes('/skills/') && norm.includes('render_template')) return true;
+  if (norm.endsWith('/vendor/excalidraw-export.iife.js')) return true;
+  return false;
 }
 
 function htmlAssetBonus(html: string): number {
@@ -68,14 +128,16 @@ function htmlAssetBonus(html: string): number {
 }
 
 export function isCompleteHtmlDocument(text: string): boolean {
-  if (!detectHtml(text)) return false;
-  if (!/<\/html>/i.test(text)) return false;
+  const doc = detectHtml(text.trim()) ? text.trim() : extractEmbeddedHtmlDocument(text);
+  if (!doc || isRenderTemplateShell(doc)) return false;
+  if (!detectHtml(doc)) return false;
+  if (!/<\/html>/i.test(doc)) return false;
   // Tiny shells that only say "see file X" are not complete answers.
-  if (text.length < 800 && STUB_HINT.test(text)) return false;
+  if (doc.length < 800 && STUB_HINT.test(doc)) return false;
   return (
-    text.length >= 400 ||
-    /data:image\//i.test(text) ||
-    /<img[^>]+src=["'][^"']+\.(?:png|jpe?g|gif|webp|svg)/i.test(text)
+    doc.length >= 400 ||
+    /data:image\//i.test(doc) ||
+    /<img[^>]+src=["'][^"']+\.(?:png|jpe?g|gif|webp|svg)/i.test(doc)
   );
 }
 
@@ -120,6 +182,8 @@ async function listRecentXplainHtml(root: string, sinceMs: number, excludeSessio
       }
       if (st.isDirectory()) {
         if (excludeSessions && name === 'sessions') continue;
+        // Skill trees often contain render_template.html — never treat as an answer.
+        if (name === 'skills' || name === 'vendor' || name === '.venv') continue;
         await walk(full);
       } else if (st.isFile() && name.endsWith('.html') && st.mtimeMs >= sinceMs - 5_000) {
         out.push(full);

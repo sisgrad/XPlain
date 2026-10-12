@@ -1,0 +1,9 @@
+{
+  "id": "builtin-api-walkthrough",
+  "scope": "builtin",
+  "name": "API walkthrough",
+  "instruction": "Explain the selected code as a public or internal API walkthrough.\n\nStructure the answer as:\n1. Purpose and when to call it\n2. Inputs / outputs / invariants\n3. Call flow (who calls whom)\n4. Failure modes and return values\n5. Minimal usage example in the same language\n\nKeep the tone practical for someone integrating this API. Match the explanation language requested by XPlain.",
+  "files": [],
+  "createdAt": "2026-01-01T00:00:00.000Z",
+  "updatedAt": "2026-01-01T00:00:00.000Z"
+}

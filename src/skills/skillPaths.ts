@@ -33,11 +33,13 @@ export function skillBridgeForProvider(provider: AgentProviderId): SkillBridgeKi
       return 'cursor';
     case 'hermes':
     case 'anthropic':
+    case 'anthropicSubscription':
       // Hermes / Claude Code conventions: .claude/skills/
       return 'claude';
     case 'openai':
     case 'xplain':
     case 'mock':
+    case 'openaiSubscription':
     default:
       // No auto-discovery — agent is told to read the canonical path from the prompt.
       return 'none';

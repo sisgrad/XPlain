@@ -10,6 +10,8 @@ export interface AnthropicConfig {
   baseUrl: string;
   model: string;
   maxTokens: number;
+  /** `output_config.effort` (low/medium/high/xhigh/max); empty = model default. */
+  effort?: string;
   apiKey?: string;
   timeoutMs: number;
   streaming: boolean;
@@ -35,6 +37,7 @@ export class AnthropicProvider implements AgentProvider {
       system: prompt.system,
       messages: [{ role: 'user', content: prompt.user }],
       stream: cfg.streaming,
+      ...(cfg.effort?.trim() ? { output_config: { effort: cfg.effort.trim() } } : {}),
     };
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',

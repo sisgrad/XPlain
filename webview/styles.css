@@ -40,15 +40,6 @@ textarea {
   isolation: isolate;
 }
 
-/* ------------------------------------------------------------ background */
-.background {
-  position: absolute;
-  inset: 0;
-  z-index: -1;
-  background-position: center;
-  pointer-events: none;
-}
-
 /* ------------------------------------------------------------------ tabs */
 .tabs {
   display: flex;
@@ -80,6 +71,22 @@ textarea {
 .tab.active {
   color: var(--vscode-foreground);
   border-bottom-color: var(--vscode-focusBorder);
+  /* Soft neon underline, echoing the glowing strokes of the XPlain logo. */
+  box-shadow: 0 2px 8px -3px var(--vscode-focusBorder);
+}
+
+/* ----------------------------------------------------------------- brand */
+.brand-mark {
+  display: block;
+  filter: drop-shadow(0 0 2px color-mix(in srgb, currentColor 45%, transparent));
+}
+
+.brand-mark.hero {
+  --xp-card-fill: var(--vscode-sideBar-background);
+  color: var(--vscode-foreground);
+  opacity: 0.7;
+  margin-bottom: 10px;
+  filter: drop-shadow(0 0 6px color-mix(in srgb, currentColor 55%, transparent)) drop-shadow(0 0 14px color-mix(in srgb, var(--vscode-focusBorder) 35%, transparent));
 }
 
 .tab-label {
@@ -347,6 +354,39 @@ code {
   opacity: 1;
 }
 
+.template-scope {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: 4px 0 8px;
+}
+
+.scope-option {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  border: 1px solid var(--vscode-panel-border);
+  border-radius: var(--radius);
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.scope-option.active {
+  border-color: var(--vscode-focusBorder, var(--vscode-button-background));
+  background: color-mix(in srgb, var(--vscode-button-background) 18%, transparent);
+}
+
+.scope-option.disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.scope-option input {
+  accent-color: var(--vscode-button-background);
+}
+
 .chip {
   margin-left: 6px;
   font-size: 10px;
@@ -359,6 +399,80 @@ code {
 .chip.ok {
   background: var(--vscode-testing-iconPassed, #388a34);
   color: #fff;
+}
+
+.chip.scope-builtin {
+  background: var(--vscode-editorInfo-foreground, #3794ff);
+  color: #fff;
+}
+
+.chip.scope-user {
+  background: var(--vscode-symbolIcon-variableForeground, #c586c0);
+  color: #1e1e1e;
+}
+
+.chip.scope-project {
+  background: var(--vscode-gitDecoration-untrackedResourceForeground, #73c991);
+  color: #1e1e1e;
+}
+
+/* ------------------------------------------------------------------ drift */
+.chip.drift {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  white-space: nowrap;
+}
+
+.chip.drift .codicon {
+  font-size: 10px;
+}
+
+.chip.drift-drifted {
+  background: var(--vscode-editorInfo-foreground, #3794ff);
+  color: #fff;
+}
+
+.chip.drift-outdated,
+.chip.drift-lost {
+  background: var(--vscode-editorWarning-foreground, #cca700);
+  color: #1e1e1e;
+}
+
+.item.drifted {
+  border-left: 3px solid var(--vscode-editorWarning-foreground, #cca700);
+}
+
+.drift-banner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin: 6px 0 8px;
+  padding: 6px 10px;
+  border-radius: 4px;
+  border: 1px solid var(--vscode-editorWarning-foreground, #cca700);
+  background: color-mix(in srgb, var(--vscode-editorWarning-foreground, #cca700) 12%, transparent);
+  font-size: 12px;
+}
+
+.drift-banner.drift-drifted {
+  border-color: var(--vscode-editorInfo-foreground, #3794ff);
+  background: color-mix(in srgb, var(--vscode-editorInfo-foreground, #3794ff) 10%, transparent);
+}
+
+.drift-banner .drift-text {
+  flex: 1 1 200px;
+}
+
+.drift-banner .drift-actions {
+  display: inline-flex;
+  gap: 10px;
+}
+
+.drift-banner .drift-actions .link .codicon {
+  font-size: 12px;
+  vertical-align: -2px;
 }
 
 /* -------------------------------------------------------------- agent tab */
@@ -689,6 +803,15 @@ textarea.question {
   font-weight: 600;
 }
 
+.html-result-frame {
+  flex: 1 1 auto;
+  min-height: 300px;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+}
+
 .html-result {
   flex: 1 1 auto;
   min-height: 300px;
@@ -703,11 +826,36 @@ textarea.question {
   padding: 0;
 }
 
-.html-result-shadow:empty::before {
-  content: 'Rendering…';
-  display: block;
+/* Shadow hosts stay :empty in light DOM — never use :empty::before for "Rendering…". */
+.html-result-shadow.is-pending {
+  min-height: 0;
+  border: none;
+  visibility: hidden;
+  position: absolute;
+  inset: 0;
+}
+
+.html-result-shadow.is-ready {
+  visibility: visible;
+  position: relative;
+}
+
+.html-result-pending-block {
+  flex: 1 1 auto;
+  min-height: 120px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
   padding: 16px;
   color: var(--vscode-descriptionForeground);
+  border: 1px solid var(--vscode-panel-border);
+  border-radius: var(--radius);
+  background: var(--vscode-editor-background, #1e1e1e);
+}
+
+.html-result-pending-block .muted {
+  opacity: 0.85;
 }
 
 .stream {

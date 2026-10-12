@@ -1,0 +1,9 @@
+{
+  "id": "builtin-max-detail",
+  "scope": "builtin",
+  "name": "Max detail (tutorial)",
+  "instruction": "Explain this code in depth and in the most accessible form possible, with diagrams and formulas wherever they help (err on the side of more rather than less). Explain every definition, concept, or piece of hardware the reader needs: if the code depends on other concepts the reader must be introduced to, cover them too, so that the explanation stands on its own as a self-contained learning resource (no other sources required). Your main goal is NOT to pack as much knowledge as possible into a compact form; it is the opposite — follow the best teaching methodologies to produce a complete, self-sufficient tutorial. Match the explanation language requested by XPlain.",
+  "files": [],
+  "createdAt": "2026-01-01T00:00:00.000Z",
+  "updatedAt": "2026-01-01T00:00:00.000Z"
+}

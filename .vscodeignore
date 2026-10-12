@@ -7,8 +7,21 @@ out/**
 scripts/**
 debug_samples/**
 examples/**
+# Accidental workspace HTML dumps at repo root (never ship in the VSIX).
+xplain-explanation.html
+l204-*.html
+**/last_result*.html
 docs/**
+# The VSIX gets dist/README.vsix.md (README.md minus images) via scripts/package.mjs.
+README.md
+README.en.md
+# Source brand graphics (logo/banner); the VSIX ships only media/ derivatives.
+assets/**
 .xplain/**
+# Runtime skill bridges / local venvs must not ship in the VSIX.
+.cursor/skills/**/references/.venv/**
+.claude/skills/**/references/.venv/**
+**/.venv/**
 .gitignore
 .eslintrc.json
 tsconfig*.json
@@ -35,6 +48,16 @@ node_modules/@cursor/sdk/dist/bundled/**
 node_modules/@cursor/sdk/**/*.d.ts
 node_modules/@cursor/sdk/**/*.map
 node_modules/@cursor/sdk/README.md
+
+# Claudexor CLI (subscription providers) is spawned, never bundled: ship runtime JS only.
+node_modules/**/*.d.ts
+node_modules/**/*.d.mts
+node_modules/**/*.d.cts
+node_modules/**/*.ts.map
+node_modules/**/README*
+node_modules/**/CHANGELOG*
+node_modules/**/LICENSE*
+node_modules/**/*.md
 
 # Dev / unused trees (keep @cursor/sdk + its runtime deps).
 node_modules/@types/**

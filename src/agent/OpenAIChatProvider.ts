@@ -12,6 +12,8 @@ import { fetchWithTimeout, joinUrl, readSse } from './stream';
 export interface OpenAIChatConfig {
   baseUrl: string;
   model: string;
+  /** `reasoning_effort` (none/minimal/low/medium/high/xhigh); empty = omit. */
+  effort?: string;
   apiKey?: string;
   timeoutMs: number;
   streaming: boolean;
@@ -40,6 +42,7 @@ export class OpenAIChatProvider implements AgentProvider {
         { role: 'user', content: prompt.user },
       ],
       stream: cfg.streaming,
+      ...(cfg.effort?.trim() ? { reasoning_effort: cfg.effort.trim() } : {}),
       ...(cfg.extraBody ?? {}),
     };
     const headers: Record<string, string> = {

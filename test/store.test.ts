@@ -1,5 +1,5 @@
 import * as assert from 'node:assert/strict';
-import { mkdtemp, readFile, rm, stat } from 'node:fs/promises';
+import { mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { NodeStoreFs } from '../src/storage/fs';
@@ -54,6 +54,9 @@ describe('XplainStore', () => {
     });
     assert.equal(session.status, 'pending');
     assert.deepEqual(session.anchorIds, [a1.id, a2.id]);
+    // Drift tracking: the hash of the code the agent saw is recorded per anchor.
+    assert.deepEqual(Object.keys(session.codeHashes ?? {}).sort(), [a1.id, a2.id].sort());
+    assert.equal(session.codeHashes?.[a1.id], a1.textHash);
 
     await store.completeSession(session.id, { title: 'Warp specialisation explained', format: 'markdown', content: '# Hi' });
     const meta = store.getSession(session.id)!;
@@ -108,6 +111,27 @@ describe('XplainStore', () => {
     assert.equal(ctx?.agent.provider, 'cursor');
     assert.ok(ctx?.items.some((i) => i.kind === 'file'));
     assert.equal((await store.readResult(s.id))?.content, '<h1>Old</h1>');
+    // No code items in the new context → no code hashes.
+    assert.deepEqual(meta.codeHashes, {});
+  });
+
+  it('backfills codeHashes for legacy sessions on init', async () => {
+    const a = await store.upsertAnchor({ file: 'g.cu', startLine: 1, endLine: 1, text: 'legacy', language: 'cuda' });
+    const s = await store.createSession({
+      title: 'Legacy',
+      question: '',
+      items: [{ kind: 'code', anchorId: a.id, file: 'g.cu', startLine: 1, endLine: 1, language: 'cuda', text: 'legacy' }],
+      agent: { provider: 'mock' },
+    });
+    // Simulate an index written before drift tracking existed.
+    const indexPath = path.join(root, '.xplain', 'index.json');
+    const index = JSON.parse(await readFile(indexPath, 'utf8'));
+    for (const m of index.sessions) delete m.codeHashes;
+    await writeFile(indexPath, JSON.stringify(index));
+
+    const fresh = new XplainStore(new NodeStoreFs(path.join(root, '.xplain')));
+    await fresh.init();
+    assert.equal(fresh.getSession(s.id)?.codeHashes?.[a.id], a.textHash);
   });
 
   it('survives a reload from disk', async () => {
@@ -130,6 +154,7 @@ describe('XplainStore', () => {
       ],
     });
     assert.equal(store.templateList.length, 1);
+    assert.equal(t.scope, 'project');
     assert.deepEqual(
       t.files.map((f) => f.name),
       ['notes.md', 'path.txt'],
@@ -143,15 +168,5 @@ describe('XplainStore', () => {
 
     await store.deleteTemplate(t.id);
     assert.equal(store.templateList.length, 0);
-  });
-
-  it('manages a per-project background image', async () => {
-    assert.equal(await store.findBackgroundFile(), undefined);
-    await store.writeBackground('png', new Uint8Array([1, 2, 3]));
-    assert.equal(await store.findBackgroundFile(), 'ui/background.png');
-    await store.writeBackground('jpg', new Uint8Array([1]));
-    assert.equal(await store.findBackgroundFile(), 'ui/background.jpg');
-    await store.clearBackground();
-    assert.equal(await store.findBackgroundFile(), undefined);
   });
 });

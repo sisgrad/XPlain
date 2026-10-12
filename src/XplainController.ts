@@ -7,20 +7,22 @@ import * as vscode from 'vscode';
 import { AgentError, type AgentItem, type AgentRequest } from './agent/AgentProvider';
 import { applyCursorIsolation, clearCursorSessionAllow } from './agent/cursorIsolation';
 import { withSharedInstructions } from './agent/prompt';
-import { AgentRegistry, PROVIDER_LABELS } from './agent/AgentRegistry';
+import { AgentRegistry, isSubscriptionProvider, PROVIDER_LABELS } from './agent/AgentRegistry';
+import { claudexorWorkDir, cliInvocation, ensureNode, shellCommand, type CliConfig } from './agent/ClaudexorProvider';
 import { inlineLocalAssets } from './agent/inlineAssets';
-import { recoverHtmlAnswer } from './agent/recoverHtml';
+import { isRenderTemplateShell, recoverHtmlAnswer } from './agent/recoverHtml';
 import { deriveTitle } from './agent/titles';
 import { ContextDraft } from './context/ContextDraft';
 import { writeContextPrefs } from './context/ContextPrefs';
 import { EXCALIDRAW_SKILL_CANONICAL_PATH, prepareExcalidrawSkillForProvider } from './skills/excalidraw';
 import { formatRange } from './editor/anchors';
 import { toRange } from './editor/decorations';
+import { describeDrift, unifiedDiff } from './editor/drift';
+import type { DriftTracker } from './editor/DriftTracker';
 import { LiveAnchors } from './editor/LiveAnchors';
 import { PickMode } from './editor/pickMode';
-import { BackgroundManager } from './panel/background';
 import type { XplainViewProvider } from './panel/XplainViewProvider';
-import type { InitState, ViewMessage } from './shared/protocol';
+import type { ClaudexorSetupAction, InitState, ViewMessage } from './shared/protocol';
 import {
   AGENT_PROVIDER_IDS,
   DRAFT_FILE_MAX_BYTES,
@@ -33,8 +35,10 @@ import {
   type SessionMeta,
   type TemplateFile,
 } from './shared/types';
+import type { TemplateLibrary } from './storage/TemplateLibrary';
 import type { XplainStore } from './storage/XplainStore';
 import type { VscodeStoreFs } from './storage/vscodeFs';
+import { slugify } from './util/ids';
 
 const MAX_TEMPLATE_FILE = 1024 * 1024;
 
@@ -42,21 +46,36 @@ interface Deps {
   context: vscode.ExtensionContext;
   store: XplainStore | undefined;
   storeFs: VscodeStoreFs | undefined;
+  templates: TemplateLibrary;
   view: XplainViewProvider;
   live: LiveAnchors | undefined;
+  drift: DriftTracker | undefined;
   draft: ContextDraft;
   pickMode: PickMode;
-  background: BackgroundManager;
   output: vscode.OutputChannel;
 }
+
+/** Read-only virtual documents for "code the agent saw" vs "code now" diffs. */
+const DIFF_SCHEME = 'xplain-code';
 
 export class XplainController implements vscode.Disposable {
   private readonly disposables: vscode.Disposable[] = [];
   private current: { sessionId: string; abort: AbortController; extending: boolean } | undefined;
   private readonly agents: AgentRegistry;
+  private readonly diffDocs = new Map<string, string>();
 
   constructor(private readonly d: Deps) {
     this.agents = new AgentRegistry(d.context);
+    this.agents.log = (m) => d.output.appendLine(m);
+
+    this.disposables.push(
+      vscode.workspace.registerTextDocumentContentProvider(DIFF_SCHEME, {
+        provideTextDocumentContent: (uri) => this.diffDocs.get(uri.query) ?? '',
+      }),
+    );
+    if (d.drift) {
+      this.disposables.push(d.drift.onDidChange((drift) => d.view.post({ type: 'drift', drift })));
+    }
 
     this.disposables.push(
       d.view.onDidReceiveMessage((m) => void this.handleMessage(m)),
@@ -64,7 +83,6 @@ export class XplainController implements vscode.Disposable {
       d.draft.onDidChange((draft) => d.view.post({ type: 'draft', draft })),
       d.pickMode.onDidChange((active) => d.view.post({ type: 'pickMode', active })),
       vscode.workspace.onDidChangeConfiguration((e) => {
-        if (e.affectsConfiguration('xplain.ui.background')) void this.pushBackground();
         if (e.affectsConfiguration('xplain.agent')) void this.pushAgentSettings();
       }),
     );
@@ -73,10 +91,12 @@ export class XplainController implements vscode.Disposable {
       this.disposables.push(
         store.onDidChange((c) => {
           if (c.kind === 'index') d.view.post({ type: 'sessions', sessions: this.sortedSessions() });
-          if (c.kind === 'templates') d.view.post({ type: 'templates', templates: [...store.templateList] });
         }),
       );
     }
+    this.disposables.push(
+      d.templates.onDidChange(() => d.view.post({ type: 'templates', templates: [...d.templates.list] })),
+    );
     if (d.live) {
       const live = d.live;
       this.disposables.push(live.onDidChange(() => d.draft.updateCodeRanges((id) => live.currentRange(id))));
@@ -95,6 +115,8 @@ export class XplainController implements vscode.Disposable {
     reg('xplain.openResult', (sessionId) => this.openResult(String(sessionId)));
     reg('xplain.openResultInEditor', (sessionId) => this.openResultInEditor(String(sessionId)));
     reg('xplain.addResultToContext', (sessionId) => this.addResultToDraft(String(sessionId)));
+    reg('xplain.refreshExplanation', (sessionId) => this.refreshSession(String(sessionId)));
+    reg('xplain.showCodeDiff', (sessionId) => this.showCodeDiff(String(sessionId)));
     reg('xplain.clearContext', () => this.d.draft.clear());
     reg('xplain.focus', () => this.d.view.reveal(false));
     reg('xplain.cancelRequest', () => this.cancel());
@@ -110,12 +132,27 @@ export class XplainController implements vscode.Disposable {
       await this.d.view.reveal(false);
       this.d.view.post({ type: 'tab', tab: 'agent' });
     });
-    reg('xplain.chooseBackground', async () => {
-      if (await this.d.background.choose()) await this.pushBackground();
-    });
-    reg('xplain.clearBackground', async () => {
-      await this.d.background.clear();
-      await this.pushBackground();
+    reg('xplain.setupSubscription', async () => {
+      const harness = await vscode.window.showQuickPick(
+        [
+          { label: 'claude', description: 'Claude Code CLI — Anthropic Claude Pro/Max subscription' },
+          { label: 'codex', description: 'Codex CLI — ChatGPT Plus/Pro subscription' },
+        ],
+        { title: 'XPlain: which subscription harness?' },
+      );
+      if (!harness) return;
+      const action = await vscode.window.showQuickPick(
+        [
+          { label: 'install', description: `Install the ${harness.label} CLI through Claudexor (managed toolchain, ~/.claudexor)` },
+          { label: 'login', description: `Log in to your ${harness.label} subscription (vendor's own login flow)` },
+          { label: 'doctor', description: 'Check readiness (installed / logged in / models)' },
+          { label: 'quota', description: 'Show subscription quota windows' },
+          { label: 'node', description: 'Download / check the managed Node.js ≥ 24.15 runtime used to run Claudexor' },
+        ],
+        { title: `XPlain: ${harness.label} — what to do?` },
+      );
+      if (!action) return;
+      await this.claudexorSetup(harness.label as 'claude' | 'codex', action.label as ClaudexorSetupAction);
     });
     reg('xplain.openStorageFolder', async () => {
       if (!this.d.storeFs) return this.noWorkspace();
@@ -194,7 +231,7 @@ export class XplainController implements vscode.Disposable {
   }
 
   /** Seed Context from an open result so Send overwrites that session. */
-  async beginExtend(sessionId: string): Promise<void> {
+  async beginExtend(sessionId: string, opts: { silent?: boolean } = {}): Promise<void> {
     const store = this.d.store;
     if (!store) return this.noWorkspace();
     const meta = store.getSession(sessionId);
@@ -228,6 +265,7 @@ export class XplainController implements vscode.Disposable {
       });
     }
     this.d.pickMode.set(false);
+    if (opts.silent) return;
     await this.d.view.reveal(true);
     this.d.view.post({ type: 'tab', tab: 'context' });
     this.d.view.post({
@@ -241,6 +279,185 @@ export class XplainController implements vscode.Disposable {
     if (!this.d.draft.snapshot.extendSessionId) return;
     this.d.draft.clear();
     this.d.view.post({ type: 'notice', level: 'info', message: 'Extend cancelled.' });
+  }
+
+  /* ------------------------------------------------------------- drift (new) */
+
+  /**
+   * One-click "bring the explanation up to date": seed the context with the old
+   * result, the current code and a diff of what changed, then send. Mode
+   * `xplain.refresh.mode` picks overwrite (Extend) vs a new session on the same blocks.
+   */
+  async refreshSession(sessionId: string): Promise<void> {
+    const store = this.d.store;
+    if (!store) return this.noWorkspace();
+    const meta = store.getSession(sessionId);
+    if (!meta || meta.status !== 'done') {
+      this.d.view.post({ type: 'notice', level: 'warn', message: 'Only a completed explanation can be refreshed.' });
+      return;
+    }
+    if (this.current) {
+      this.d.view.post({ type: 'notice', level: 'warn', message: 'A request is already running. Stop it first.' });
+      return;
+    }
+    const drift = this.d.drift ? await this.d.drift.sessionDrift(meta) : undefined;
+    const mode = vscode.workspace.getConfiguration('xplain.refresh').get<'overwrite' | 'newSession'>('mode', 'overwrite');
+
+    await this.beginExtend(sessionId, { silent: true });
+    if (mode === 'newSession') this.d.draft.setExtendSessionId(null);
+
+    const diffs: string[] = [];
+    if (drift) {
+      for (const a of drift.anchors) {
+        if (a.info.level === 'fresh' || !a.oldText) continue;
+        const header = `# ${a.anchor.file} ${formatRange(a.anchor)} — ${describeDrift(a.info)}`;
+        diffs.push(
+          a.newText === undefined
+            ? `${header}\n(block not found in the current file; the explained code was:)\n${a.oldText}`
+            : `${header}\n${unifiedDiff(a.oldText, a.newText, { file: a.anchor.file })}`,
+        );
+      }
+    }
+    if (diffs.length) {
+      this.d.draft.add({ kind: 'file', name: 'code-changes.diff', content: diffs.join('\n\n') });
+    }
+
+    const lang = this.d.draft.snapshot.explainLanguage;
+    const question =
+      lang === 'ru'
+        ? 'Код изменился с момента этого объяснения (см. code-changes.diff). Обнови объяснение под текущий код: сохрани то, что осталось верным, исправь устаревшее и явно укажи, что изменилось в поведении.'
+        : 'The code changed since this explanation (see code-changes.diff). Update the explanation to match the current code: keep what is still accurate, revise what changed, and call out the behavioral differences explicitly.';
+    this.d.draft.setQuestion(question);
+    this.d.output.appendLine(
+      `[refresh] session ${sessionId}: mode=${mode}, changed blocks=${drift?.summary.changedBlocks ?? '?'}, diff=${diffs.length}`,
+    );
+    await this.send();
+  }
+
+  /**
+   * Run a Claudexor setup step in an integrated terminal (interactive: vendor
+   * logins open a browser / device-code flow). Uses the bundled CLI and the same
+   * Node the provider would use, so what the user sees is what XPlain runs.
+   */
+  /** Download (or re-check) the managed Node.js runtime with a progress notification. */
+  private async installNodeRuntime(cfg: Omit<CliConfig, 'onProgress' | 'signal'>): Promise<void> {
+    try {
+      const node = await vscode.window.withProgress(
+        { location: vscode.ProgressLocation.Notification, title: 'XPlain: Node.js runtime for Claudexor', cancellable: true },
+        (progress, token) => {
+          const ac = new AbortController();
+          token.onCancellationRequested(() => ac.abort());
+          return ensureNode({ ...cfg, signal: ac.signal, onProgress: (m) => progress.report({ message: m }) });
+        },
+      );
+      const msg = `Node.js ${node.version} ready for Claudexor: ${node.command}`;
+      this.d.output.appendLine(`[node] ${msg}`);
+      this.d.view.post({ type: 'notice', level: 'info', message: msg });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      this.d.output.appendLine(`[node] ${message}`);
+      this.d.view.post({ type: 'notice', level: 'error', message });
+    }
+  }
+
+  async claudexorSetup(harness: 'claude' | 'codex', action: ClaudexorSetupAction): Promise<void> {
+    const settings = this.agents.read();
+    const args =
+      action === 'install'
+        ? ['harness', 'install', harness, '--target', 'local', '--yes']
+        : action === 'login'
+          ? ['auth', 'login', harness]
+          : action === 'quota'
+            ? ['quota', '--refresh']
+            : ['doctor', '--harness', harness];
+    const nodeCfg = {
+      cliPath: settings.claudexor.cliPath,
+      nodePath: settings.claudexor.nodePath,
+      extensionPath: this.d.context.extensionPath,
+      globalStoragePath: this.d.context.globalStorageUri.fsPath,
+      autoInstallNode: settings.claudexor.autoInstallNode,
+      nodeVersion: settings.claudexor.nodeVersion.trim() || undefined,
+    };
+    if (action === 'node') {
+      await this.installNodeRuntime(nodeCfg);
+      return;
+    }
+    let inv;
+    try {
+      inv = await vscode.window.withProgress(
+        { location: vscode.ProgressLocation.Notification, title: 'XPlain: preparing Claudexor runtime', cancellable: true },
+        (progress, token) => {
+          const ac = new AbortController();
+          token.onCancellationRequested(() => ac.abort());
+          return cliInvocation({ ...nodeCfg, signal: ac.signal, onProgress: (m) => progress.report({ message: m }) }, args);
+        },
+      );
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      this.d.output.appendLine(`[claudexor] ${message}`);
+      void vscode.window.showErrorMessage(`XPlain: ${message}`, 'Open settings').then((pick) => {
+        if (pick) void vscode.commands.executeCommand('workbench.action.openSettings', 'xplain.agent.claudexor');
+      });
+      return;
+    }
+    const cwd = claudexorWorkDir(this.d.context.globalStorageUri.fsPath);
+    await fs.mkdir(cwd, { recursive: true });
+    const env: Record<string, string> = {};
+    for (const [k, v] of Object.entries(inv.env)) if (typeof v === 'string') env[k] = v;
+    const terminal = vscode.window.createTerminal({ name: `XPlain · Claudexor (${harness})`, cwd, env });
+    terminal.show(true);
+    // Env is already applied to the terminal; print the plain command for the user to see/re-run.
+    const cmd = shellCommand({ ...inv, node: { ...inv.node, env: {} } });
+    terminal.sendText(cmd, true);
+    this.d.output.appendLine(`[claudexor] terminal: ${cmd}`);
+    if (action === 'install' || action === 'login') {
+      this.d.view.post({
+        type: 'notice',
+        level: 'info',
+        message: `Follow the ${harness} ${action} steps in the terminal, then click "Test connection" in the Agent tab.`,
+      });
+    }
+  }
+
+  /** Confirm, then delete a session (its files and orphaned anchors). Shared by History and the CodeLens Quick Pick. */
+  async deleteSessionWithConfirm(sessionId: string): Promise<boolean> {
+    const store = this.d.store;
+    const s = store?.getSession(sessionId);
+    if (!store || !s) return false;
+    const ok = await vscode.window.showWarningMessage(`Delete explanation "${s.title}"?`, { modal: true }, 'Delete');
+    if (ok !== 'Delete') return false;
+    await store.deleteSession(sessionId);
+    return true;
+  }
+
+  /** Open a VS Code diff per changed block: the code the agent saw vs the code now. */
+  async showCodeDiff(sessionId: string): Promise<void> {
+    const store = this.d.store;
+    const drift = this.d.drift;
+    if (!store || !drift) return this.noWorkspace();
+    const meta = store.getSession(sessionId);
+    if (!meta) return;
+    const result = await drift.sessionDrift(meta);
+    const changed = result.anchors.filter((a) => a.info.level !== 'fresh' && a.oldText !== undefined);
+    if (changed.length === 0) {
+      void vscode.window.showInformationMessage('XPlain: the code is unchanged since this explanation.');
+      return;
+    }
+    for (const a of changed.slice(0, 6)) {
+      const base = a.anchor.file.split('/').pop() ?? 'block';
+      const ext = base.includes('.') ? base.slice(base.lastIndexOf('.')) : '';
+      const stem = base.replace(/\.[^.]+$/, '');
+      const key = `${sessionId}:${a.anchor.id}`;
+      this.diffDocs.set(`${key}:old`, a.oldText ?? '');
+      this.diffDocs.set(`${key}:new`, a.newText ?? '// block not found in the current file');
+      const left = vscode.Uri.from({ scheme: DIFF_SCHEME, path: `/${stem}.explained${ext}`, query: `${key}:old` });
+      const right = vscode.Uri.from({ scheme: DIFF_SCHEME, path: `/${stem}.current${ext}`, query: `${key}:new` });
+      const title = `${base} ${formatRange(a.anchor)}: explained ↔ current (${describeDrift(a.info)})`;
+      await vscode.commands.executeCommand('vscode.diff', left, right, title, { preview: changed.length === 1 });
+    }
+    if (changed.length > 6) {
+      void vscode.window.showInformationMessage(`XPlain: showing 6 of ${changed.length} changed blocks.`);
+    }
   }
 
   addDraftFiles(files: Array<{ name: string; content: string }>): void {
@@ -394,12 +611,18 @@ export class XplainController implements vscode.Disposable {
           });
         },
       );
-      const content =
+      let content =
         response.format === 'html'
           ? await this.makeHtmlSelfContained(await this.recoverHtmlIfStub(response.content), sessionId)
           : response.content;
+      if (response.format === 'html' && isRenderTemplateShell(content)) {
+        this.d.output.appendLine('[html] refusing to store Excalidraw render_template shell as the explanation');
+        throw new AgentError(
+          'Agent returned the Excalidraw render shell instead of an explanation HTML. Retry Send, or check Output → XPlain.',
+        );
+      }
       const title = deriveTitle({
-        agentTitle: response.title,
+        agentTitle: response.title && response.title !== 'XPlain explanation' ? response.title : undefined,
         question: draft.question,
         format: response.format,
         content,
@@ -464,7 +687,8 @@ export class XplainController implements vscode.Disposable {
   }
 
   private async pickProvider(title: string): Promise<AgentProviderId | undefined> {
-    const items = AGENT_PROVIDER_IDS.filter((id) => id !== 'mock').map((id) => ({ label: PROVIDER_LABELS[id], id }));
+    // Subscription providers have no API key (Claudexor drives a logged-in vendor CLI).
+    const items = AGENT_PROVIDER_IDS.filter((id) => id !== 'mock' && !isSubscriptionProvider(id)).map((id) => ({ label: PROVIDER_LABELS[id], id }));
     const pick = await vscode.window.showQuickPick(items, { title });
     return pick?.id;
   }
@@ -477,7 +701,7 @@ export class XplainController implements vscode.Disposable {
       else out.push({ kind: 'file', name: i.name, content: i.content });
     }
     if (draft.templateId) {
-      const t = this.d.store?.getTemplate(draft.templateId);
+      const t = this.d.templates.getTemplate(draft.templateId);
       if (t) out.push({ kind: 'template', templateId: t.id, name: t.name });
     }
     return out;
@@ -508,9 +732,14 @@ export class XplainController implements vscode.Disposable {
       }
     }
     if (draft.templateId) {
-      const t = store.getTemplate(draft.templateId);
+      const t = this.d.templates.getTemplate(draft.templateId);
       if (t) {
-        out.push({ type: 'template', name: t.name, instruction: t.instruction, files: await store.readTemplateFiles(t.id) });
+        out.push({
+          type: 'template',
+          name: t.name,
+          instruction: t.instruction,
+          files: await this.d.templates.readFiles(t.id),
+        });
       }
     }
     return out;
@@ -569,13 +798,24 @@ export class XplainController implements vscode.Disposable {
     type Item = vscode.QuickPickItem & { sessionId?: string; action?: 'addBlock' };
     const openButton: vscode.QuickInputButton = { iconPath: new vscode.ThemeIcon('open-preview'), tooltip: 'Open in editor' };
     const addButton: vscode.QuickInputButton = { iconPath: new vscode.ThemeIcon('add'), tooltip: 'Add to context' };
-    const items: Item[] = sessions.map((s) => ({
-      label: `$(comment-discussion) ${s.title}`,
-      description: relativeTime(s.createdAt),
-      detail: s.question.trim() ? `Q: ${firstLine(s.question)}` : `${s.anchorIds.length} block(s) in this context`,
-      sessionId: s.id,
-      buttons: picking ? [openButton] : [openButton, addButton],
-    }));
+    const diffButton: vscode.QuickInputButton = { iconPath: new vscode.ThemeIcon('diff'), tooltip: 'Show code diff (explained ↔ current)' };
+    const refreshButton: vscode.QuickInputButton = { iconPath: new vscode.ThemeIcon('sync'), tooltip: 'Refresh: re-explain against the current code' };
+    const deleteButton: vscode.QuickInputButton = { iconPath: new vscode.ThemeIcon('trash'), tooltip: 'Delete this explanation' };
+    const driftMap = this.d.drift?.current ?? {};
+    const items: Item[] = sessions.map((s) => {
+      const d = driftMap[s.id];
+      const driftNote = d && d.level !== 'fresh' ? ` · ${d.level === 'drifted' ? '$(edit)' : '$(warning)'} ${describeDrift(d)}` : '';
+      const buttons = picking ? [openButton] : [openButton, addButton];
+      if (d && d.level !== 'fresh' && !picking) buttons.push(diffButton, refreshButton);
+      if (!picking) buttons.push(deleteButton);
+      return {
+        label: `$(comment-discussion) ${s.title}`,
+        description: `${relativeTime(s.createdAt)}${driftNote}`,
+        detail: s.question.trim() ? `Q: ${firstLine(s.question)}` : `${s.anchorIds.length} block(s) in this context`,
+        sessionId: s.id,
+        buttons,
+      };
+    });
     items.push({ label: '', kind: vscode.QuickPickItemKind.Separator });
     items.push({
       label: '$(add) Add this code block to context',
@@ -594,6 +834,9 @@ export class XplainController implements vscode.Disposable {
       if (!e.item.sessionId) return;
       qp.hide();
       if (e.button === openButton) await this.openResultInEditor(e.item.sessionId);
+      else if (e.button === diffButton) await this.showCodeDiff(e.item.sessionId);
+      else if (e.button === refreshButton) await this.refreshSession(e.item.sessionId);
+      else if (e.button === deleteButton) await this.deleteSessionWithConfirm(e.item.sessionId);
       else await this.addResultToDraft(e.item.sessionId);
     });
     qp.onDidAccept(async () => {
@@ -641,35 +884,76 @@ export class XplainController implements vscode.Disposable {
       this.d.view.post({ type: 'notice', level: 'warn', message: session.status === 'error' ? `Session failed: ${session.error}` : 'No result stored for this session.' });
       return;
     }
+    await this.d.view.reveal(true);
+    // Show Result chrome immediately (Download works) before heavy HTML prep / postMessage.
+    const needsHtmlPrep = result.format === 'html';
+    this.d.view.post({
+      type: 'showResult',
+      session,
+      format: result.format,
+      content: needsHtmlPrep ? '' : result.content,
+      contentPending: needsHtmlPrep,
+    });
+    this.d.view.post({ type: 'tab', tab: 'result' });
+
     let content = result.content;
     if (result.format === 'html') {
       const recovered = await this.recoverHtmlIfStub(content);
       const inlined = await this.makeHtmlSelfContained(recovered, sessionId);
-      if (inlined !== result.content) {
-        content = inlined;
+      content = inlined;
+      // Only rewrite disk when we clearly improved the saved document (never shrink / template-swap).
+      if (isImprovedHtmlResult(result.content, inlined)) {
         const title = deriveTitle({
-          agentTitle: session.title,
+          agentTitle: session.title === 'XPlain explanation' ? undefined : session.title,
           question: session.question,
           format: 'html',
           content,
           items: [],
         });
-        await store.completeSession(sessionId, { title: title || session.title, format: 'html', content });
-        session.title = title || session.title;
-      } else {
-        content = inlined;
+        const nextTitle = title && title !== 'XPlain explanation' ? title : session.title;
+        await store.completeSession(sessionId, { title: nextTitle || session.title, format: 'html', content });
+        session.title = nextTitle || session.title;
+        this.d.output.appendLine(`[html] updated stored result (${result.content.length} → ${inlined.length} bytes)`);
       }
+      // Yield so the pending Result UI can paint before a multi‑MB postMessage.
+      await new Promise<void>((r) => setImmediate(r));
+      this.d.view.post({
+        type: 'showResult',
+        session,
+        format: 'html',
+        content,
+      });
     }
-    await this.d.view.reveal(true);
-    // Pass HTML body for srcdoc rendering. Loading result.html via asWebviewUri inside a
-    // sandboxed iframe is unreliable on Remote-SSH (blank white frame).
-    this.d.view.post({
-      type: 'showResult',
-      session,
-      format: result.format,
-      content,
+  }
+
+  /** Save result.html / result.md via Save dialog (does not wait for panel render). */
+  async downloadResult(sessionId: string): Promise<void> {
+    const store = this.d.store;
+    if (!store) return;
+    const session = store.getSession(sessionId);
+    if (!session) return;
+    const result = await store.readResult(sessionId);
+    if (!result) {
+      this.d.view.post({ type: 'notice', level: 'warn', message: 'No result stored for this session.' });
+      return;
+    }
+    const ext = result.format === 'html' ? 'html' : 'md';
+    const base = slugify(session.title) || sessionId;
+    const folder = vscode.workspace.workspaceFolders?.[0]?.uri;
+    const defaultUri = folder
+      ? vscode.Uri.joinPath(folder, `${base}.${ext}`)
+      : vscode.Uri.file(`${base}.${ext}`);
+    const uri = await vscode.window.showSaveDialog({
+      defaultUri,
+      saveLabel: 'Save result',
+      filters:
+        result.format === 'html'
+          ? { HTML: ['html', 'htm'], 'All files': ['*'] }
+          : { Markdown: ['md'], 'All files': ['*'] },
     });
-    this.d.view.post({ type: 'tab', tab: 'result' });
+    if (!uri) return;
+    await vscode.workspace.fs.writeFile(uri, new TextEncoder().encode(result.content));
+    this.d.view.post({ type: 'notice', level: 'info', message: `Saved ${uri.fsPath}` });
   }
 
   /** If the agent returned a stub that points at a workspace HTML file, load that file. */
@@ -772,13 +1056,13 @@ export class XplainController implements vscode.Disposable {
     const state: InitState = {
       draft: this.d.draft.snapshot,
       sessions: this.sortedSessions(),
-      templates: store ? [...store.templateList] : [],
+      templates: [...this.d.templates.list],
       pickMode: this.d.pickMode.active,
       busy: this.current ? { busy: true, sessionId: this.current.sessionId, label: 'Waiting for agent…' } : { busy: false },
-      background: await this.d.background.getState(this.d.view.webview),
       hasWorkspace: Boolean(store),
       agentLabel: this.agents.label(),
       agentSettings: await this.agents.view(),
+      drift: this.d.drift?.current ?? {},
     };
     this.d.view.post({ type: 'init', state });
   }
@@ -790,10 +1074,6 @@ export class XplainController implements vscode.Disposable {
   private setBusy(busy: BusyState): void {
     void vscode.commands.executeCommand('setContext', 'xplain.busy', busy.busy);
     this.d.view.post({ type: 'busy', busy });
-  }
-
-  private async pushBackground(): Promise<void> {
-    this.d.view.post({ type: 'background', background: await this.d.background.getState(this.d.view.webview) });
   }
 
   private async handleMessage(m: ViewMessage): Promise<void> {
@@ -844,6 +1124,12 @@ export class XplainController implements vscode.Disposable {
         case 'beginExtend':
           await this.beginExtend(m.sessionId);
           break;
+        case 'refreshSession':
+          await this.refreshSession(m.sessionId);
+          break;
+        case 'showCodeDiff':
+          await this.showCodeDiff(m.sessionId);
+          break;
         case 'cancelExtend':
           this.cancelExtend();
           break;
@@ -856,16 +1142,15 @@ export class XplainController implements vscode.Disposable {
         case 'openSessionInEditor':
           await this.openResultInEditor(m.sessionId);
           break;
+        case 'downloadSession':
+          await this.downloadResult(m.sessionId);
+          break;
         case 'addSessionToDraft':
           await this.addResultToDraft(m.sessionId);
           break;
-        case 'deleteSession': {
-          const s = store?.getSession(m.sessionId);
-          if (!s) break;
-          const ok = await vscode.window.showWarningMessage(`Delete explanation "${s.title}"?`, { modal: true }, 'Delete');
-          if (ok === 'Delete') await store!.deleteSession(m.sessionId);
+        case 'deleteSession':
+          await this.deleteSessionWithConfirm(m.sessionId);
           break;
-        }
         case 'renameSession':
           if (m.title.trim()) await store?.renameSession(m.sessionId, m.title.trim());
           break;
@@ -876,25 +1161,72 @@ export class XplainController implements vscode.Disposable {
           this.d.pickMode.toggle();
           break;
         case 'saveTemplate': {
-          if (!store) return this.noWorkspace();
-          const t = await store.saveTemplate(m);
-          this.d.view.post({ type: 'notice', level: 'info', message: `Template "${t.name}" saved.` });
+          try {
+            if (m.scope === 'project' && !store) return this.noWorkspace();
+            const t = await this.d.templates.save({
+              id: m.id,
+              name: m.name,
+              instruction: m.instruction,
+              files: m.files,
+              scope: m.scope,
+            });
+            const where = t.scope === 'user' ? 'user library' : 'this project';
+            this.d.view.post({ type: 'notice', level: 'info', message: `Template "${t.name}" saved (${where}).` });
+          } catch (err) {
+            this.d.view.post({
+              type: 'notice',
+              level: 'error',
+              message: err instanceof Error ? err.message : String(err),
+            });
+          }
           break;
         }
         case 'deleteTemplate': {
-          const t = store?.getTemplate(m.templateId);
+          const t = this.d.templates.getTemplate(m.templateId);
           if (!t) break;
+          if (t.scope === 'builtin') {
+            this.d.view.post({ type: 'notice', level: 'warn', message: 'Built-in templates cannot be deleted. Duplicate them to customize.' });
+            break;
+          }
           const ok = await vscode.window.showWarningMessage(`Delete template "${t.name}"?`, { modal: true }, 'Delete');
           if (ok === 'Delete') {
-            await store!.deleteTemplate(m.templateId);
+            await this.d.templates.delete(m.templateId);
             if (this.d.draft.snapshot.templateId === m.templateId) this.d.draft.setTemplate(null);
           }
           break;
         }
         case 'loadTemplateForEdit': {
-          const t = store?.getTemplate(m.templateId);
+          const t = this.d.templates.getTemplate(m.templateId);
           if (!t) break;
-          this.d.view.post({ type: 'editTemplate', template: t, files: await store!.readTemplateFiles(t.id) });
+          if (t.scope === 'builtin') {
+            this.d.view.post({
+              type: 'notice',
+              level: 'info',
+              message: 'Built-in templates are read-only. Use Duplicate to copy into user or project scope.',
+            });
+            break;
+          }
+          this.d.view.post({ type: 'editTemplate', template: t, files: await this.d.templates.readFiles(t.id) });
+          break;
+        }
+        case 'duplicateTemplate': {
+          try {
+            if (m.scope === 'project' && !store) return this.noWorkspace();
+            const t = await this.d.templates.duplicate(m.templateId, m.scope);
+            this.d.view.post({
+              type: 'notice',
+              level: 'info',
+              message: `Duplicated as "${t.name}" (${t.scope === 'user' ? 'user' : 'project'}).`,
+            });
+            this.d.view.post({ type: 'editTemplate', template: t, files: await this.d.templates.readFiles(t.id) });
+            this.d.view.post({ type: 'tab', tab: 'templates' });
+          } catch (err) {
+            this.d.view.post({
+              type: 'notice',
+              level: 'error',
+              message: err instanceof Error ? err.message : String(err),
+            });
+          }
           break;
         }
         case 'pickTemplateFiles': {
@@ -908,18 +1240,6 @@ export class XplainController implements vscode.Disposable {
           const files = await this.readFiles(uris);
           if (m.destination === 'draft') this.addDraftFiles(files);
           else this.d.view.post({ type: 'templateFiles', files });
-          break;
-        }
-        case 'chooseBackground':
-          if (await this.d.background.choose()) await this.pushBackground();
-          break;
-        case 'clearBackground':
-          await this.d.background.clear();
-          await this.pushBackground();
-          break;
-        case 'dropBackground': {
-          const ext = (m.name.split('.').pop() ?? 'png').toLowerCase().replace('jpeg', 'jpg');
-          if (await this.d.background.save(ext, Buffer.from(m.dataBase64, 'base64'))) await this.pushBackground();
           break;
         }
         case 'openSettings':
@@ -945,6 +1265,9 @@ export class XplainController implements vscode.Disposable {
           this.d.view.post({ type: 'agentTest', result });
           break;
         }
+        case 'claudexorSetup':
+          await this.claudexorSetup(m.harness, m.action);
+          break;
         case 'listModels': {
           const result = await this.agents.listModels(m.settings, m.requestId);
           if (result.error) this.d.output.appendLine(`[models] ${result.provider} @ ${result.baseUrl}: ${result.error}`);
@@ -1049,8 +1372,21 @@ function agentEndpoint(s: AgentSettings): string | undefined {
 
 function agentModel(s: AgentSettings): string | undefined {
   if (s.provider === 'hermes' || s.provider === 'openai' || s.provider === 'anthropic') return s[s.provider].model;
+  if (isSubscriptionProvider(s.provider)) return s[s.provider].model || undefined;
   if (s.provider === 'cursor') return s.cursor.model;
   return undefined;
+}
+
+/** Whether `next` is a safer document to persist than `prev` (openResult must not clobber). */
+function isImprovedHtmlResult(prev: string, next: string): boolean {
+  if (next === prev) return false;
+  if (isRenderTemplateShell(next)) return false;
+  if (isRenderTemplateShell(prev) && !isRenderTemplateShell(next)) return true;
+  const prevData = (prev.match(/data:image\//gi) ?? []).length;
+  const nextData = (next.match(/data:image\//gi) ?? []).length;
+  if (nextData > prevData) return true;
+  if (next.length + 200 < prev.length) return false;
+  return next.length > prev.length;
 }
 
 function safeParseUri(s: string): vscode.Uri | undefined {

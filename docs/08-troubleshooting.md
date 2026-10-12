@@ -74,6 +74,38 @@ dashboard с cookie-аутентификацией; XPlain работает с �
 `http://127.0.0.1:8642/v1`. Проверка: `curl -H 'Authorization: Bearer <API_SERVER_KEY>' http://<host>:8642/v1/models`.
 Подробнее — [04-agent-api.md](04-agent-api.md#hermes-agent).
 
+## Subscription-провайдер: «No Node.js >= 24.15 found» / ошибка скачивания Node
+
+- Обычно XPlain сам скачивает Node 24 в `<globalStorage>/node-runtime/` при первом запросе. Ошибка
+  появляется, если это отключено (`xplain.agent.claudexor.autoInstallNode: false`) или скачивание не удалось.
+- Нет доступа к nodejs.org (офлайн/прокси): установите Node 24.15+ вручную (nvm: `nvm install 24`) на
+  машине, где работает расширение (при Remote-SSH — сервер), либо укажите бинарник в
+  `xplain.agent.claudexor.nodePath`. Extension host видит не тот `PATH`, что ваш shell; XPlain дополнительно
+  проверяет `~/.nvm/versions/node/*`, `/usr/local/bin`, `/opt/homebrew/bin`, `~/.local/bin`.
+- «Checksum mismatch» — повторите (кнопка **Node.js runtime** во вкладке Agent); битый архив удаляется автоматически.
+- Неподдерживаемая платформа (не linux/darwin/win32 на x64/arm64) — только ручная установка + `nodePath`.
+- Сбросить управляемый runtime: удалите папку `node-runtime` в global storage расширения.
+
+## Subscription-провайдер: «claude/codex CLI not found on PATH» или «unavailable»
+
+- Нажмите **Install … CLI** во вкладке Agent (`claudexor harness install <h> --target local --yes`),
+  затем **Log in** (`claudexor auth login <h>`), затем **Test connection**.
+- Если CLI вендора уже установлен в нестандартном месте — экспортируйте `CLAUDEXOR_CLAUDE_BIN` /
+  `CLAUDEXOR_CODEX_BIN` для процесса IDE или добавьте каталог в `PATH`.
+- Подробности — **Run doctor** (JSON с readiness-проверками) и Output → XPlain.
+- Демон `claudexord` можно перезапустить: `claudexor daemon stop` в терминале настройки.
+
+## Subscription-провайдер: нет PNG-диаграмм / «agent» не пишет файлы
+
+- PNG рендерятся только в режиме `agent` (`xplain.agent.claudexor.mode = auto` включает его при галочке
+  Excalidraw). В режиме `ask` файлы не пишутся вообще.
+- При `project = auto` в не-git workspace агент работает в приватной папке
+  (`<globalStorage>/claudexor/projects/<hash>/`): проверьте там `.xplain/diagrams/<sessionId>/` и логи
+  Output → XPlain (`[claudexor] mirrored N diagram file(s)`). Первый запуск требует `uv sync` и
+  Playwright Chromium в копии скилла — это делает агент; при сбое выполните команду из `SKILL.md` вручную.
+- Если `.git` в вашем проекте появился неожиданно — вы выставили `project = workspace` для не-git папки;
+  Claudexor инициализирует репозиторий с baseline-коммитом. Верните `auto`/`private`.
+
 ## Вкладка Agent
 
 - **Список моделей пуст / «Could not load models»** — сервер недоступен по указанному Base URL с машины
@@ -126,6 +158,22 @@ dashboard с cookie-аутентификацией; XPlain работает с �
   `references/` у копии скилла (`.xplain/skills/…` или bridge). Не принимайте fallback на чужие PNG.
 - Cursor: смотрите Output → XPlain на `[isolation]`; в корне проекта должен обновляться блок
   `.cursorignore` между маркерами `xplain-agent-isolation`.
+- Ошибка **«local sandboxing is requested but no sandbox available»**: Landlock sandbox на Remote-SSH
+  часто недоступен. Оставьте `xplain.agent.cursor.useSandbox` = `false` (по умолчанию). Изоляция
+  остаётся через `.cursorignore` + промпт Artifact access. Включайте sandbox только на хостах,
+  где Cursor SDK его реально поддерживает.
+
+## CodeLens показывает «outdated» / «code changed», хотя я ничего не менял
+
+- Сравнение идёт с кодом, который видел агент (`codeHashes` в `index.json`), а не с якорем. Если сессия
+  была создана до появления drift, хеши восстановлены из `context.json` — для очень старых сессий, у которых
+  `context.json` уже не совпадал с кодом, пометка корректна.
+- Правки только в комментариях и пробелах считаются fresh; смена первой значимой строки блока (сигнатуры)
+  всегда даёт outdated. Пороги: `xplain.drift.outdatedRatio`, `xplain.drift.driftedMaxLines`.
+- Проверьте, что именно изменилось: **Show diff** (hover блока / баннер на Result / History).
+- Чтобы убрать объяснение из CodeLens без удаления: `xplain.editor.hideOutdated = true`.
+- Чтобы привести объяснение в соответствие: **Refresh** (перезапишет сессию; `xplain.refresh.mode = newSession`
+  сохранит старую).
 
 ## Extend перезаписал не то / CodeLens пропал
 
@@ -143,6 +191,9 @@ XPlain подхватывает этот файл при сохранении и
 
 ## Результат HTML без картинок / белое полотно
 
+- Долгое **«Rendering…»**: обычно большой `result.html` (диаграммы как `data:` URI, часто ~1–2 MB).
+  Кнопка **Download** сохраняет файл с диска сразу, не дожидаясь Shadow DOM. Старый баг CSS
+  (`:empty::before` на shadow-host) мог оставлять «Rendering…» навсегда — исправлено.
 - Панель Result рендерит HTML в **Shadow DOM** (не во вложенном iframe): так `data:`-картинки
   проходят CSP webview. Старые версии с `iframe srcdoc` часто показывали текст, но не PNG.
 - Тело берётся из `result.html` и передаётся в webview сообщением. Агент должен оставлять пути к PNG
@@ -162,13 +213,6 @@ XPlain подхватывает этот файл при сохранении и
 - Из Explorer VS Code передаётся `text/uri-list`; файл читается на стороне хоста. Если ничего не
   произошло, посмотрите Output → XPlain и консоль webview.
 - Запасной путь — клик по зоне «browse…» (системный диалог выбора файлов).
-
-## Фон не меняется
-
-- Проектный фон (`.xplain/ui/background.*`) имеет приоритет над пользовательским; очистите его
-  командой **XPlain: Clear Background Image** → «This project».
-- Файлы крупнее 15 МБ отклоняются.
-- При очень низкой `opacity` фон может быть практически невидим — проверьте настройку.
 
 ## `.xplain/` не создаётся
 

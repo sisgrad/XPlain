@@ -20,14 +20,15 @@ Node устанавливается через nvm в `~/.nvm`; в новой о
 | `npm run check` | `tsc --noEmit` для хоста (`tsconfig.json`) и webview (`webview/tsconfig.json`) |
 | `npm run lint` | ESLint для `src/` и `webview/` |
 | `npm test` | Компиляция в `out/` (`tsconfig.test.json`) и запуск mocha |
-| `npm run package` | Production-сборка (minify, без sourcemap) + `vsce package` → `dist/xplain-<версия>.vsix` |
+| `npm run package` | Production-сборка (minify, без sourcemap) + `scripts/package.mjs` (`vsce package --target <платформа>`) → `dist/xplain-<платформа>-<версия>.vsix`. VSIX платформозависим из-за нативного биндинга tree-sitter в `@cursor/sdk-<платформа>`; собирать на целевой платформе или передать `--target` |
+| `npm run release` | То же; результат — файл для публикации во вкладке GitHub Releases |
 | `npm run install:ide` | `scripts/install.sh` — установка `.vsix` в найденные Cursor/VS Code |
 
 ## Отладка (F5)
 
 `.vscode/launch.json` содержит конфигурацию **Run Extension**: собирает проект (`npm: build`) и запускает
-Extension Development Host с открытой папкой `debug_samples/`. Там лежит `4_warp_specialization.cu` —
-удобный большой файл для проверки якорей и CodeLens.
+Extension Development Host. Откройте в нём любую папку с кодом — для проверки якорей и CodeLens удобен
+большой файл с несколькими функциями.
 
 Рекомендуемый цикл:
 
@@ -48,14 +49,16 @@ src/                  extension host (TypeScript, CommonJS-бандл)
   editor/             якоря, CodeLens, декорации, pick mode
   agent/              AgentRegistry, провайдеры (xplain/hermes/openai/anthropic/cursor/mock), prompt, stream, titles
   skills/             bundled Excalidraw skill + install helpers
-  panel/              WebviewView, фон
+  panel/              WebviewView
   context/            ContextDraft
   util/
 webview/              UI (Preact, IIFE-бандл для браузера)
 test/                 mocha-тесты (Node, без vscode)
 scripts/              setup/install для Linux/macOS/Windows
 examples/             референсный агент-сервер
-media/                иконки
+media/                иконки: xplain-256/128.png (Marketplace), xplain.svg (activity bar, монохром),
+                      gutter-{light,dark}.svg / gutter-drift-{light,dark}.svg (редактор)
+assets/               фирменная графика: social-logo.png (исходный логотип), social-banner.png (README)
 ```
 
 Два tsconfig: `tsconfig.json` (хост, `lib: ES2022`, без DOM) и `webview/tsconfig.json`
@@ -78,7 +81,7 @@ media/                иконки
 | Файл | Что проверяет |
 | --- | --- |
 | `test/anchors.test.ts` | нормализация/хеш, `toLineChange`, сдвиги диапазонов, поиск snippet, валидация хеша |
-| `test/store.test.ts` | создание `.xplain`, переиспользование якорей, сессии ↔ якоря, результаты md/html, reload, шаблоны, фон |
+| `test/store.test.ts` | создание `.xplain`, переиспользование якорей, сессии ↔ якоря, результаты md/html, reload, шаблоны |
 | `test/html-result.test.ts` | `ensureSelfContainedHtml`: документ / фрагмент / Markdown→HTML |
 | `test/inline-assets.test.ts` | встраивание локальных PNG-путей в `data:` URI |
 | `test/skill-paths.test.ts` | канон `.xplain/skills/` и bridge-пути по провайдеру |
@@ -103,7 +106,6 @@ media/                иконки
 7. Drop `.md` на Context → item `file` в draft.
 8. Правка выше блока → CodeLens сдвигается; reload окна → якорь найден.
 7. Templates: drop из Explorer и из ОС, сохранение, выбор в Context, передача в запрос.
-8. Фон: выбор файла, drop картинки, настройки opacity/blur/fit, очистка.
 9. Ответ всегда `result.html` (Shadow DOM в панели, Open in editor); Markdown от агента оборачивается автоматически.
 10. Вкладка Agent: смена провайдера показывает его поля; Save key → индикатор `saved`, ключа нет в
     `settings.json`; выпадающий список Model заполняется с Hermes/Ollama сам (и после Save key), ↻ перезагружает, ✎ — ручной ввод;
@@ -123,13 +125,23 @@ media/                иконки
   и `AgentSettings` (`src/shared/types.ts`), ветки в `AgentRegistry` (`read/save/provider/label/test`),
   ключи `xplain.agent.<id>.*` в `package.json`, поля формы в `webview/components/AgentTab.tsx`,
   тесты против локального `http.Server`, разделы в `docs/02`, `03`, `04`.
+- **Визуальный стиль** задаёт логотип `assets/social-logo.png`: монохромные неоновые штрихи на тёмном фоне,
+  скруглённые формы, мотив «X + чевроны + карточка объяснения». Все иконки расширения — его упрощения:
+  `media/xplain.svg` (activity bar; только `currentColor`, без заливок — VS Code использует SVG как маску),
+  `media/gutter-*.svg` (16px, отдельные light/dark-варианты: светлый штрих со свечением на тёмной теме,
+  графит на светлой; drift-вариант — янтарный с «!»), `webview/components/BrandMark.tsx` (та же геометрия
+  inline: `mask` — силуэт для шапки, `detail` — контурная версия для пустого состояния Result). Все эти
+  файлы **генерируются** скриптом `scripts/brand-mark.py` из одной геометрии (координаты в пространстве
+  1024×775 px буквы логотипа) — править геометрию там и перезапускать, а не редактировать SVG руками.
+  В webview тот же мотив — мягкое свечение (`.brand-mark`, `.tab.active`). Marketplace-иконки
+  `media/xplain-256.png`/`-128.png` получены из логотипа (обрезка по альфе + Lanczos).
 
 ## Выпуск версии
 
 1. Обновить `version` в `package.json` (и CHANGELOG при наличии).
 2. `npm run check && npm run lint && npm test`.
-3. `npm run package` → `dist/xplain-<версия>.vsix`.
-4. `npm run install:ide` для локальной проверки; приложить `.vsix` к релизу.
+3. `npm run release` → `xplain-<платформа>-<версия>.vsix` (для каждой поддерживаемой платформы — свой запуск на соответствующей машине или с `--target`).
+4. `npm run install:ide` для локальной проверки; опубликовать `.vsix` во вкладке **Releases** на GitHub.
 
 Поле `repository` в `package.json` не задано, поэтому `vsce` вызывается с `--allow-missing-repository`;
 при появлении удалённого репозитория добавьте поле и уберите флаг.

@@ -5,6 +5,8 @@
 import * as vscode from 'vscode';
 import {
   AGENT_PROVIDER_IDS,
+  SUBSCRIPTION_HARNESS,
+  type SubscriptionProviderId,
   type AgentModelsResult,
   type AgentProviderId,
   type AgentSettings,
@@ -14,6 +16,17 @@ import {
 } from '../shared/types';
 import { AgentError, type AgentProvider } from './AgentProvider';
 import { AnthropicProvider, listAnthropicModels } from './AnthropicProvider';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
+import {
+  ClaudexorProvider,
+  claudexorWorkDir,
+  harnessStatus,
+  HARNESS_LABELS,
+  listHarnessModels,
+  privateProjectDir,
+  type ClaudexorConfig,
+} from './ClaudexorProvider';
 import { CursorSdkProvider, cursorSdkStoreDir, listCursorModels } from './CursorSdkProvider';
 import { describeDashboardMistake, originOf, probeDashboard } from './hermesHints';
 import { HttpAgentProvider } from './HttpAgentProvider';
@@ -25,15 +38,23 @@ const LEGACY_SECRET = 'xplain.agent.apiKey';
 
 /** Sentinel "base URL" for AgentModelsResult matching (Cursor has no HTTP base). */
 export const CURSOR_MODELS_BASE = 'cursor://sdk';
+/** Sentinel "base URL" for subscription providers (Claudexor CLI, no HTTP base). */
+export const CLAUDEXOR_MODELS_BASE = 'claudexor://';
 
 export const PROVIDER_LABELS: Record<AgentProviderId, string> = {
   xplain: 'XPlain HTTP agent',
   hermes: 'Hermes Agent',
-  openai: 'OpenAI / Codex',
-  anthropic: 'Anthropic (Claude)',
+  openai: 'OpenAI / Codex (API)',
+  anthropic: 'Anthropic / Claude (API)',
+  openaiSubscription: 'OpenAI / Codex (Subscription)',
+  anthropicSubscription: 'Anthropic / Claude (Subscription)',
   cursor: 'Cursor SDK',
   mock: 'Mock (offline)',
 };
+
+export function isSubscriptionProvider(id: AgentProviderId): id is SubscriptionProviderId {
+  return id === 'openaiSubscription' || id === 'anthropicSubscription';
+}
 
 export const DEFAULT_SETTINGS: AgentSettings = {
   provider: 'xplain',
@@ -43,9 +64,12 @@ export const DEFAULT_SETTINGS: AgentSettings = {
   headers: {},
   systemPrompt: '',
   hermes: { baseUrl: 'http://127.0.0.1:8642/v1', model: 'hermes-agent' },
-  openai: { baseUrl: 'https://api.openai.com/v1', model: 'chat-latest' },
-  anthropic: { baseUrl: 'https://api.anthropic.com', model: 'claude-sonnet-5', maxTokens: 8192 },
-  cursor: { model: 'composer-2.5' },
+  openai: { baseUrl: 'https://api.openai.com/v1', model: 'chat-latest', effort: '' },
+  anthropic: { baseUrl: 'https://api.anthropic.com', model: 'claude-sonnet-5', maxTokens: 8192, effort: '' },
+  openaiSubscription: { model: '', effort: '' },
+  anthropicSubscription: { model: '', effort: '' },
+  cursor: { model: 'composer-2.5', effort: '' },
+  claudexor: { cliPath: '', nodePath: '', mode: 'auto', project: 'auto', autoInstallNode: true, nodeVersion: '' },
 };
 
 export function normalizeProviderId(value: unknown): AgentProviderId {
@@ -75,14 +99,27 @@ export class AgentRegistry {
       openai: {
         baseUrl: cfg.get<string>('openai.baseUrl', d.openai.baseUrl),
         model: cfg.get<string>('openai.model', d.openai.model),
+        effort: cfg.get<string>('openai.effort', ''),
       },
       anthropic: {
         baseUrl: cfg.get<string>('anthropic.baseUrl', d.anthropic.baseUrl),
         model: cfg.get<string>('anthropic.model', d.anthropic.model),
         maxTokens: cfg.get<number>('anthropic.maxTokens', d.anthropic.maxTokens),
+        effort: cfg.get<string>('anthropic.effort', ''),
       },
+      openaiSubscription: { model: cfg.get<string>('openaiSubscription.model', ''), effort: cfg.get<string>('openaiSubscription.effort', '') },
+      anthropicSubscription: { model: cfg.get<string>('anthropicSubscription.model', ''), effort: cfg.get<string>('anthropicSubscription.effort', '') },
       cursor: {
         model: cfg.get<string>('cursor.model', d.cursor.model),
+        effort: cfg.get<string>('cursor.effort', ''),
+      },
+      claudexor: {
+        cliPath: cfg.get<string>('claudexor.cliPath', ''),
+        nodePath: cfg.get<string>('claudexor.nodePath', ''),
+        mode: oneOf(cfg.get<string>('claudexor.mode'), ['auto', 'ask', 'agent'] as const, 'auto'),
+        project: oneOf(cfg.get<string>('claudexor.project'), ['auto', 'workspace', 'private'] as const, 'auto'),
+        autoInstallNode: cfg.get<boolean>('claudexor.autoInstallNode', true),
+        nodeVersion: cfg.get<string>('claudexor.nodeVersion', ''),
       },
     };
   }
@@ -115,6 +152,19 @@ export class AgentRegistry {
       ['anthropic.model', settings.anthropic.model.trim(), d.anthropic.model],
       ['anthropic.maxTokens', clampInt(settings.anthropic.maxTokens, 256, 200_000, d.anthropic.maxTokens), d.anthropic.maxTokens],
       ['cursor.model', settings.cursor.model.trim(), d.cursor.model],
+      ['openaiSubscription.model', settings.openaiSubscription.model.trim(), ''],
+      ['anthropicSubscription.model', settings.anthropicSubscription.model.trim(), ''],
+      ['openai.effort', settings.openai.effort.trim(), ''],
+      ['anthropic.effort', settings.anthropic.effort.trim(), ''],
+      ['openaiSubscription.effort', settings.openaiSubscription.effort.trim(), ''],
+      ['anthropicSubscription.effort', settings.anthropicSubscription.effort.trim(), ''],
+      ['cursor.effort', settings.cursor.effort.trim(), ''],
+      ['claudexor.cliPath', settings.claudexor.cliPath.trim(), ''],
+      ['claudexor.nodePath', settings.claudexor.nodePath.trim(), ''],
+      ['claudexor.mode', settings.claudexor.mode, 'auto'],
+      ['claudexor.project', settings.claudexor.project, 'auto'],
+      ['claudexor.autoInstallNode', Boolean(settings.claudexor.autoInstallNode), true],
+      ['claudexor.nodeVersion', settings.claudexor.nodeVersion.trim(), ''],
     ];
     for (const [key, value, def] of entries) {
       // Writing the default removes the explicit entry to keep settings.json tidy,
@@ -197,17 +247,32 @@ export class AgentRegistry {
           headers: settings.headers,
           systemPrompt: settings.systemPrompt,
         }));
+      case 'openaiSubscription':
+      case 'anthropicSubscription': {
+        const id = settings.provider;
+        return new ClaudexorProvider(id, PROVIDER_LABELS[id], async () => this.claudexorConfig(settings, id));
+      }
       case 'cursor':
-        return new CursorSdkProvider(async () => ({
-          model: settings.cursor.model,
-          apiKey: await this.getKey('cursor'),
-          systemPrompt: settings.systemPrompt,
-          cwd: vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? '',
-          storeDir: cursorSdkStoreDir(this.context.globalStorageUri.fsPath),
-          streaming: settings.streaming,
-          // Load project .cursor/ layer so runtime skill bridges under .cursor/skills are visible.
-          loadProjectSettings: true,
-        }));
+        return new CursorSdkProvider(async () => {
+          const cfg = vscode.workspace.getConfiguration('xplain.agent');
+          return {
+            model: settings.cursor.model,
+            effort: settings.cursor.effort,
+            apiKey: await this.getKey('cursor'),
+            systemPrompt: settings.systemPrompt,
+            cwd: vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? '',
+            storeDir: cursorSdkStoreDir(this.context.globalStorageUri.fsPath),
+            streaming: settings.streaming,
+            // Load project .cursor/ layer so runtime skill bridges under .cursor/skills are visible.
+            loadProjectSettings: true,
+            // Off by default: Remote-SSH often has no usable Landlock sandbox.
+            useSandbox: cfg.get<boolean>('cursor.useSandbox', false),
+            onLog: (message) => {
+              /* best-effort; controller Output channel is not wired here */
+              console.info(`[xplain] ${message}`);
+            },
+          };
+        });
       case 'xplain':
       default:
         return new HttpAgentProvider(async () => ({
@@ -220,6 +285,43 @@ export class AgentRegistry {
     }
   }
 
+  /** Settings for a Claudexor-backed subscription provider. */
+  claudexorConfig(settings: AgentSettings, id: SubscriptionProviderId): ClaudexorConfig {
+    const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+    const globalStorage = this.context.globalStorageUri.fsPath;
+    const pref = settings.claudexor.project;
+    // `auto`: run in the workspace only when it is already a git repo — Claudexor
+    // git-inits (and baseline-commits) non-git project folders, which we never do to a user's tree.
+    const isGit = Boolean(workspaceRoot && fs.existsSync(path.join(workspaceRoot, '.git')));
+    const useWorkspace = Boolean(workspaceRoot) && (pref === 'workspace' || (pref === 'auto' && isGit));
+    return {
+      harness: SUBSCRIPTION_HARNESS[id],
+      model: settings[id].model,
+      effort: settings[id].effort,
+      cliPath: settings.claudexor.cliPath,
+      nodePath: settings.claudexor.nodePath,
+      extensionPath: this.context.extensionPath,
+      globalStoragePath: globalStorage,
+      autoInstallNode: settings.claudexor.autoInstallNode,
+      nodeVersion: settings.claudexor.nodeVersion.trim() || undefined,
+      onProgress: (m) => {
+        this.log(`[node] ${m}`);
+        vscode.window.setStatusBarMessage(`$(cloud-download) XPlain: ${m}`, 8_000);
+      },
+      workDir: claudexorWorkDir(globalStorage),
+      mode: settings.claudexor.mode,
+      projectDir: useWorkspace ? workspaceRoot! : privateProjectDir(globalStorage, workspaceRoot),
+      workspaceRoot,
+      timeoutMs: minutesToMs(settings.timeoutMinutes),
+      streaming: settings.streaming,
+      systemPrompt: settings.systemPrompt,
+      onLog: this.log,
+    };
+  }
+
+  /** Optional sink for provider diagnostics (wired to the Output channel by the controller). */
+  log: (message: string) => void = (m) => console.info(`[xplain] ${m}`);
+
   /** Short description for the panel footer, e.g. "Hermes Agent · hermes-agent". */
   label(settings: AgentSettings = this.read()): string {
     switch (settings.provider) {
@@ -229,6 +331,9 @@ export class AgentRegistry {
         return `${PROVIDER_LABELS.openai} · ${settings.openai.model || 'model not set'}`;
       case 'anthropic':
         return `${PROVIDER_LABELS.anthropic} · ${settings.anthropic.model || 'model not set'}`;
+      case 'openaiSubscription':
+      case 'anthropicSubscription':
+        return `${PROVIDER_LABELS[settings.provider]} · ${settings[settings.provider].model || 'default model'}`;
       case 'cursor':
         return `${PROVIDER_LABELS.cursor} · ${settings.cursor.model || 'model not set'}`;
       case 'mock':
@@ -248,10 +353,18 @@ export class AgentRegistry {
     const base = { requestId, provider, models: [] as string[] };
     if (provider === 'cursor') {
       try {
-        const models = await listCursorModels(await this.getKey('cursor'), signal);
-        return { ...base, baseUrl: CURSOR_MODELS_BASE, models };
+        const { models, efforts } = await listCursorModels(await this.getKey('cursor'), signal);
+        return { ...base, baseUrl: CURSOR_MODELS_BASE, models, efforts };
       } catch (err) {
         return { ...base, baseUrl: CURSOR_MODELS_BASE, error: err instanceof Error ? err.message : String(err) };
+      }
+    }
+    if (isSubscriptionProvider(provider)) {
+      try {
+        const models = await listHarnessModels(this.claudexorConfig(settings, provider), SUBSCRIPTION_HARNESS[provider], AbortSignal.timeout(60_000));
+        return { ...base, baseUrl: CLAUDEXOR_MODELS_BASE, models };
+      } catch (err) {
+        return { ...base, baseUrl: CLAUDEXOR_MODELS_BASE, error: err instanceof Error ? err.message : String(err) };
       }
     }
     if (provider !== 'hermes' && provider !== 'openai' && provider !== 'anthropic') {
@@ -323,6 +436,29 @@ export class AgentRegistry {
               : ` Note: "${s.model}" is not in the list (may still work).`;
           return { provider, ok: true, models, message: `Connected to ${s.baseUrl}: ${models.length} model(s).${note}` };
         }
+        case 'openaiSubscription':
+        case 'anthropicSubscription': {
+          const harness = SUBSCRIPTION_HARNESS[provider];
+          const st = await harnessStatus(this.claudexorConfig(settings, provider), harness, AbortSignal.timeout(60_000));
+          const label = HARNESS_LABELS[harness];
+          if (!st.available) {
+            const hint = !st.installed
+              ? ` Install it: XPlain → Agent → "Install ${harness} CLI" (runs claudexor harness install ${harness}).`
+              : st.loggedIn === false
+                ? ` Log in: XPlain → Agent → "Log in" (runs claudexor auth login ${harness}).`
+                : ' Use "Run doctor" in the Agent tab for details.';
+            throw new AgentError(`${label} is ${st.status}: ${st.details.slice(0, 3).join('; ') || 'not ready'}.${hint}`);
+          }
+          let models: string[] | undefined;
+          try {
+            models = await listHarnessModels(this.claudexorConfig(settings, provider), harness, AbortSignal.timeout(60_000));
+          } catch {
+            /* model list is optional */
+          }
+          const model = settings[provider].model;
+          const note = !model ? ' Using the harness default model.' : models && !models.includes(model) ? ` Note: "${model}" is not in the list (may still work).` : ` "${model}" is available.`;
+          return { provider, ok: true, models, message: `${label} is ready via Claudexor${models ? ` (${models.length} model(s))` : ''}.${note}` };
+        }
         case 'cursor': {
           const list = await this.listModels(settings);
           if (list.error) throw new AgentError(list.error);
@@ -366,6 +502,10 @@ function readTimeoutMinutes(cfg: vscode.WorkspaceConfiguration, fallback: number
     return clampInt(Math.ceil(legacy / 60_000), 1, 180, fallback);
   }
   return fallback;
+}
+
+function oneOf<T extends string>(v: unknown, allowed: readonly T[], def: T): T {
+  return typeof v === 'string' && (allowed as readonly string[]).includes(v) ? (v as T) : def;
 }
 
 function clampInt(v: unknown, lo: number, hi: number, def: number): number {
